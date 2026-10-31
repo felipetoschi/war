@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { BRASIL_MAP } from "./brasil";
-import { completedObjective, connected, objectiveById, OBJECTIVES } from "./objectives";
+import {
+  completedObjective,
+  connected,
+  MIN_MISSING_AT_DEAL,
+  objectiveById,
+  OBJECTIVES,
+  territoriesToConnect,
+} from "./objectives";
 import { attack, createGame, placeArmies } from "./rules";
 import type { GameState, Player } from "./types";
 
@@ -46,11 +53,27 @@ describe("sorteio dos objetivos", () => {
     }
   });
 
-  it("ninguém começa com objetivo já cumprido", () => {
-    for (let i = 0; i < 30; i++) {
-      const game = createGame(map, two);
-      for (const p of two) expect(completedObjective(game, map, p.id)).toBeNull();
+  it("ninguém começa com objetivo cumprido ou muito adiantado (faltam 3+ conquistas)", () => {
+    for (const players of [two, four, four.slice(0, 3)]) {
+      for (let i = 0; i < 40; i++) {
+        const game = createGame(map, players);
+        for (const p of players) {
+          expect(completedObjective(game, map, p.id)).toBeNull();
+          for (const id of game.objectives[p.id]!) {
+            const { missing } = objectiveById(id).progress(game, map, p.id);
+            expect(missing, `${id} para ${p.id}`).toBeGreaterThanOrEqual(MIN_MISSING_AT_DEAL);
+          }
+        }
+      }
     }
+  });
+
+  it("conta quantos territórios faltam conquistar para ligar um caminho", () => {
+    // AP → PA → MT → MS → PR → SC → RS: tem tudo menos MS e SC
+    const state = stateWith({ ap: 1, pa: 1, mt: 1, pr: 1, rs: 1 });
+    expect(territoriesToConnect(state, map, "a", "ap", ["rs"])).toBe(2);
+    expect(progress(state, "oiapoque-chui").missing).toBe(2);
+    expect(progress(stateWith({ sp: 1, rj: 1, mg: 1 }), "eixo-do-poder").missing).toBe(1);
   });
 
   it("caçada só entra com 3 ou mais jogadores; o alvo é o próximo da roda", () => {
@@ -75,6 +98,7 @@ describe("caminhos", () => {
     expect(progress(stateWith(broken), "oiapoque-chui")).toEqual({
       done: false,
       text: "AP ✓ · RS ✓",
+      missing: 1,
     });
   });
 
@@ -89,7 +113,11 @@ describe("contagens e regiões", () => {
   it("Senhor da costa: 10 dos 17 estados do litoral", () => {
     const coast = map.territories.filter((t) => t.coastIndex !== undefined).map((t) => t.id);
     const nine = Object.fromEntries(coast.slice(0, 9).map((id) => [id, 1]));
-    expect(progress(stateWith(nine), "senhor-da-costa")).toEqual({ done: false, text: "9/10" });
+    expect(progress(stateWith(nine), "senhor-da-costa")).toEqual({
+      done: false,
+      text: "9/10",
+      missing: 1,
+    });
     const ten = Object.fromEntries(coast.slice(0, 10).map((id) => [id, 1]));
     expect(progress(stateWith(ten), "senhor-da-costa").done).toBe(true);
   });
@@ -107,6 +135,7 @@ describe("contagens e regiões", () => {
     expect(progress(stateWith(regions), "sudeste-sul")).toEqual({
       done: false,
       text: "7/7 · mais 0/3",
+      missing: 3,
     });
     const plus = { ...regions, ba: 1, go: 1, ms: 1 };
     expect(progress(stateWith(plus), "sudeste-sul").done).toBe(true);

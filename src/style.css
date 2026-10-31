@@ -832,3 +832,12 @@ button.primary {
   font-weight: 400;
   color: var(--muted);
 }
+
+.confirm {
+  display: flex;
+  gap: 8px;
+}
+
+.confirm button {
+  flex: 1;
+}

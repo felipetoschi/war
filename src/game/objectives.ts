@@ -12,7 +12,15 @@ export interface ObjectiveProgress {
   done: boolean;
   /** Texto curto de progresso, ex.: "3/5" ou "AP ✓ · RS ✗". */
   text: string;
+  /**
+   * Quanto ainda falta: em geral, quantos territórios ainda precisam ser conquistados
+   * (na Fortaleza, quantos territórios ainda precisam de 2 soldados). 0 = cumprido.
+   */
+  missing: number;
 }
+
+/** No sorteio, só entram objetivos que ainda exigem pelo menos isto (evita começar adiantado). */
+export const MIN_MISSING_AT_DEAL = 3;
 
 export interface ObjectiveDef {
   id: string;
@@ -61,12 +69,47 @@ export function connected(
   return false;
 }
 
+/**
+ * Menor número de territórios que o jogador ainda precisa conquistar para ligar `from`
+ * a algum de `to` (busca 0-1: entrar num território seu custa 0; num de outro, 1).
+ */
+export function territoriesToConnect(
+  state: GameState,
+  map: GameMap,
+  player: PlayerId,
+  from: TerritoryId,
+  to: TerritoryId[],
+): number {
+  const cost = (id: TerritoryId) => (owns(state, player, id) ? 0 : 1);
+  const goal = new Set(to);
+  const best = new Map<TerritoryId, number>([[from, cost(from)]]);
+  const deque: TerritoryId[] = [from];
+  while (deque.length) {
+    const id = deque.shift()!;
+    const d = best.get(id)!;
+    if (goal.has(id)) return d;
+    for (const n of map.territories.find((t) => t.id === id)!.neighbors) {
+      const nd = d + cost(n);
+      if (nd < (best.get(n) ?? Infinity)) {
+        best.set(n, nd);
+        if (cost(n) === 0) deque.unshift(n);
+        else deque.push(n);
+      }
+    }
+  }
+  return Infinity;
+}
+
 const mark = (ok: boolean) => (ok ? "✓" : "✗");
 
 function atLeast(ids: TerritoryId[], needed: number) {
   return (state: GameState, _map: GameMap, player: PlayerId): ObjectiveProgress => {
     const have = ownedCount(state, player, ids);
-    return { done: have >= needed, text: `${Math.min(have, needed)}/${needed}` };
+    return {
+      done: have >= needed,
+      text: `${Math.min(have, needed)}/${needed}`,
+      missing: Math.max(0, needed - have),
+    };
   };
 }
 
@@ -81,7 +124,8 @@ function regions(regionIds: string[], extra = 0) {
     const text = extra
       ? `${have}/${ids.length} · mais ${Math.min(others, extra)}/${extra}`
       : `${have}/${ids.length}`;
-    return { done: regionsDone && extraDone, text };
+    const missing = ids.length - have + Math.max(0, extra - others);
+    return { done: regionsDone && extraDone, text, missing };
   };
 }
 
@@ -106,6 +150,7 @@ export const OBJECTIVES: ObjectiveDef[] = [
     progress: (state, map, player) => ({
       done: connected(state, map, player, "ap", ["rs"]),
       text: `AP ${mark(owns(state, player, "ap"))} · RS ${mark(owns(state, player, "rs"))}`,
+      missing: territoriesToConnect(state, map, player, "ap", ["rs"]),
     }),
   },
   {
@@ -117,6 +162,7 @@ export const OBJECTIVES: ObjectiveDef[] = [
     progress: (state, map, player) => ({
       done: connected(state, map, player, "ac", NORTHEAST_COAST),
       text: `AC ${mark(owns(state, player, "ac"))} · litoral NE ${ownedCount(state, player, NORTHEAST_COAST)}`,
+      missing: territoriesToConnect(state, map, player, "ac", NORTHEAST_COAST),
     }),
   },
   {
@@ -136,6 +182,7 @@ export const OBJECTIVES: ObjectiveDef[] = [
       return {
         done: have >= HUNT_FALLBACK,
         text: `${Math.min(have, HUNT_FALLBACK)}/${HUNT_FALLBACK}`,
+        missing: Math.max(0, HUNT_FALLBACK - have),
       };
     },
   },
@@ -146,7 +193,11 @@ export const OBJECTIVES: ObjectiveDef[] = [
     description: "Ter 12 territórios com pelo menos 2 soldados em cada.",
     progress: (state, _map, player) => {
       const have = territoryCount(state, player, 2);
-      return { done: have >= 12, text: `${Math.min(have, 12)}/12` };
+      return {
+        done: have >= 12,
+        text: `${Math.min(have, 12)}/12`,
+        missing: Math.max(0, 12 - have),
+      };
     },
   },
 
@@ -209,15 +260,16 @@ export const OBJECTIVES: ObjectiveDef[] = [
     progress: (state, _map, player) => {
       const target = state.huntTargets[player];
       const killer = target ? state.eliminatedBy[target] : undefined;
-      if (killer === player) return { done: true, text: "alvo eliminado ✓" };
+      if (killer === player) return { done: true, text: "alvo eliminado ✓", missing: 0 };
       if (target && killer === undefined) {
         const left = territoryCount(state, target);
-        return { done: false, text: `alvo com ${left} território(s)` };
+        return { done: false, text: `alvo com ${left} território(s)`, missing: left };
       }
       const have = territoryCount(state, player);
       return {
         done: have >= HUNT_FALLBACK,
         text: `alvo caiu: ${Math.min(have, HUNT_FALLBACK)}/${HUNT_FALLBACK}`,
+        missing: Math.max(0, HUNT_FALLBACK - have),
       };
     },
   },
@@ -253,7 +305,8 @@ function shuffle<T>(items: T[], rng: Rng): T[] {
 
 /**
  * Sorteia 2 objetivos para cada jogador (1 flexível + 1 focado), sem repetir entre
- * jogadores e sem dar a ninguém um objetivo que já começa cumprido.
+ * jogadores e evitando objetivos muito adiantados: só entram os que ainda exigem pelo
+ * menos `MIN_MISSING_AT_DEAL` conquistas. Se nenhum servir, fica o menos adiantado.
  * Na caçada, o alvo é o próximo jogador na roda.
  */
 export function dealObjectives(state: GameState, map: GameMap, rng: Rng): void {
@@ -273,8 +326,10 @@ export function dealObjectives(state: GameState, map: GameMap, rng: Rng): void {
     state.huntTargets[player] = playerIds[(i + 1) % playerIds.length]!;
     state.objectives[player] = (["flex", "focus"] as const).map((group) => {
       const pool = pools[group];
-      const index = pool.findIndex((o) => !o.progress(state, map, player).done);
-      const [chosen] = pool.splice(index === -1 ? 0 : index, 1);
+      const missing = pool.map((o) => o.progress(state, map, player).missing);
+      let index = missing.findIndex((m) => m >= MIN_MISSING_AT_DEAL);
+      if (index === -1) index = missing.indexOf(Math.max(...missing));
+      const [chosen] = pool.splice(index, 1);
       return chosen!.id;
     });
   });

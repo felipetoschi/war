@@ -90,6 +90,8 @@ let target: TerritoryId | null = null;
 let selectedCards: string[] = [];
 let lastBattle: LastBattle | null = null;
 let menuOpen = false;
+/** O jogador tocou em "Encerrar ataques" e falta confirmar. */
+let confirmEndAttack = false;
 const log: string[] = [];
 /** Mensagens geradas durante uma rolagem esperam os dados pararem para aparecer. */
 let deferredLog: string[] | null = null;
@@ -167,6 +169,7 @@ function act(update: () => void) {
 }
 
 function resetToSetup() {
+  confirmEndAttack = false;
   gameId++;
   rolling = null;
   frozen = null;
@@ -217,6 +220,7 @@ function renderPlayersScreen(): string {
 // ---- ações ----
 function onTerritoryClick(id: TerritoryId) {
   if (!state || rolling || state.battle) return;
+  confirmEndAttack = false;
   const owner = state.territories[id]?.owner;
   const me = currentPlayer(state).id;
   act(() => {
@@ -608,6 +612,13 @@ function seatActions(game: GameState, player: Player): string {
         step = `<p class="note"><b>${stateName(selected)}</b> → <b>${stateName(target)}</b><br/>Atacar com quantos soldados?</p>
           <div class="chips">${buttons}</div>`;
       }
+      if (confirmEndAttack) {
+        return `<p class="note warn">Encerrar os ataques? Depois disso não dá para atacar de novo nesta vez.</p>
+          <div class="confirm">
+            <button id="confirm-end-attack" class="primary">Sim, encerrar</button>
+            <button id="cancel-end-attack">Continuar atacando</button>
+          </div>`;
+      }
       return `${step}<button id="end-attack">Encerrar ataques</button>`;
     }
     case "fortify":
@@ -855,8 +866,17 @@ function bindEvents() {
   on("[data-card]", (el) => onCardClick(el.dataset.card!));
   on("#trade", onTrade);
   on("#skip-reinforce", () => act(() => (state = skipReinforce(state!))));
-  on("#end-attack", () =>
+  on("#end-attack", () => {
+    confirmEndAttack = true;
+    render();
+  });
+  on("#cancel-end-attack", () => {
+    confirmEndAttack = false;
+    render();
+  });
+  on("#confirm-end-attack", () =>
     act(() => {
+      confirmEndAttack = false;
       selected = null;
       target = null;
       state = endAttackPhase(state!);
