@@ -25,7 +25,8 @@ Valores marcados com ⚙️ são configuráveis no código (`src/game/rules.ts` 
    2. toca no estado **que vai receber o ataque** — **só estados que fazem divisa**;
    3. escolhe **com quantos soldados ataca**: de 1 a 3, sempre deixando 1 soldado na origem.
 
-   Pode atacar quantas vezes quiser no seu turno e depois encerra os ataques.
+   Pode atacar quantas vezes quiser no seu turno e depois encerra os ataques — o jogo pede
+   **confirmação** ("Sim, encerrar" ou "Continuar atacando") para evitar toque sem querer.
 
 6. **Dados manuais:** cada jogador rola o seu dado no seu lado da mesa.
    1. O **atacante** toca em **"Rolar ataque"** no seu canto: 1 dado **vermelho** por soldado.
@@ -62,7 +63,10 @@ dois caminhos ao mesmo tempo, saber o objetivo do outro vira estratégia — e n
 
 - Um objetivo é **flexível** (caminho ou contagem, com várias formas de cumprir) e o outro é
   **focado** (região ou estados-chave).
-- Ninguém recebe o mesmo objetivo de outro jogador, nem um objetivo que já comece cumprido.
+- Ninguém recebe o mesmo objetivo de outro jogador.
+- **Nada de objetivo adiantado:** no sorteio, só entram objetivos que ainda exigem **pelo menos 3
+  conquistas** ⚙️ (nos caminhos, conta o menor número de estados a conquistar para ligar as pontas;
+  na Fortaleza, quantos territórios ainda precisam de 2 soldados).
 - **"Último vivo"** continua valendo como vitória.
 
 | Tipo     | Objetivo                    | Como cumprir                                                           |
@@ -145,5 +149,5 @@ jogador.
       retirado por enquanto — só se ataca quem faz divisa. A numeração do litoral continua nos
       dados do mapa (`coastIndex`) caso a ideia volte de outra forma.
 - [ ] **Mínimo de reforço:** hoje, quem tem só 1 estado e nenhuma região não recebe soldados.
-- [ ] **Calibrar objetivos:** alguns podem começar perto de serem cumpridos (ex.: 3/4 no Eixo do
-      poder). Ajustar números ou evitar no sorteio objetivos muito adiantados.
+- [ ] **Calibrar objetivos:** ajustar os números (16 territórios, 10 do litoral, mínimo de 3
+      conquistas no sorteio etc.) depois de algumas partidas.
