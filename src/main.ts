@@ -3,9 +3,11 @@ import { BRASIL_MAP } from "./game/brasil";
 import { hasValidSet, isValidSet, MAX_HAND, OWNED_CARD_BONUS, tradeValue } from "./game/cards";
 import type { BattleResult } from "./game/dice";
 import { getTerritory } from "./game/map";
+import { objectiveById } from "./game/objectives";
 import {
   cancelAttack,
   canAttack,
+  controlsRegion,
   createGame,
   currentPlayer,
   declareAttack,
@@ -29,7 +31,7 @@ import {
   tradeCards,
 } from "./game/rules";
 import type { Card, GameState, Player, PlayerId, TerritoryId } from "./game/types";
-import { LABELS, STATE_PATHS, VIEW_BOX } from "./ui/brasil-svg";
+import { LABELS, REGION_LABELS, STATE_PATHS, VIEW_BOX } from "./ui/brasil-svg";
 import { animateDice, dieHtml, ROLL_MS } from "./ui/dice";
 import {
   fullscreenSupported,
@@ -275,7 +277,7 @@ function onRollDefense() {
     "defense",
     pending.defenseDice,
     () => {
-      const result = rollDefense(game);
+      const result = rollDefense(game, map);
       outcome = result;
       state = result.state;
       lastBattle = {
@@ -325,7 +327,7 @@ function onCardClick(id: string) {
 function onTrade() {
   act(() => {
     const player = currentPlayer(state!);
-    const result = tradeCards(state!, selectedCards);
+    const result = tradeCards(state!, map, selectedCards);
     state = result.state;
     selectedCards = [];
     const bonus = result.bonusTerritories.length
@@ -392,7 +394,57 @@ function renderBoard(game: GameState): string {
     })
     .join("");
 
-  return `<svg class="board" viewBox="${VIEW_BOX}" role="img" aria-label="Mapa do Brasil">${states}${labels}</svg>`;
+  return `<svg class="board" viewBox="${VIEW_BOX}" role="img" aria-label="Mapa do Brasil">${states}${renderRegions(game)}${labels}</svg>`;
+}
+
+/**
+ * Destaque discreto das regiões: um contorno na cor da região, só do lado de fora dela
+ * (máscara), e uma etiqueta com o nome e o bônus — na cor de quem domina a região inteira.
+ */
+function regionPaths(region: string): string[] {
+  return map.territories
+    .filter((t) => t.region === region)
+    .flatMap((t) => (t.id === "go" ? [STATE_PATHS.go!, STATE_PATHS.df!] : [STATE_PATHS[t.id]!]));
+}
+
+function renderRegions(game: GameState): string {
+  const defs = map.regions
+    .map(
+      (
+        r,
+      ) => `<mask id="fora-${r.id}" maskUnits="userSpaceOnUse" x="-50" y="-50" width="800" height="750">
+        <rect x="-50" y="-50" width="800" height="750" fill="white" />
+        ${regionPaths(r.id)
+          .map((d) => `<path d="${d}" fill="black" />`)
+          .join("")}
+      </mask>`,
+    )
+    .join("");
+  const outlines = map.regions
+    .map(
+      (r) => `<g class="region-outline" mask="url(#fora-${r.id})" style="stroke:${r.color}">
+        ${regionPaths(r.id)
+          .map((d) => `<path d="${d}" />`)
+          .join("")}
+      </g>`,
+    )
+    .join("");
+  const labels = map.regions
+    .map((r) => {
+      const pos = REGION_LABELS[r.id]!;
+      const owner = game.players.find((p) => controlsRegion(game, map, p.id, r.id));
+      const fill = owner ? owner.color : "#ffffffcc";
+      const text = owner ? "#fff" : r.color;
+      const label = `${r.name} +${r.bonus}`;
+      const width = label.length * 6.2 + 14;
+      return `<g class="region-label${owner ? " owned" : ""}">
+        <rect x="${pos.x - width / 2}" y="${pos.y - 10}" width="${width}" height="18" rx="9"
+          fill="${fill}" stroke="${r.color}" />
+        <text x="${pos.x}" y="${pos.y + 3.5}" style="fill:${text}">${label}</text>
+      </g>`;
+    })
+    .join("");
+  return `<defs>${defs}</defs><g class="regions">${outlines}${labels}</g>`;
 }
 
 // ---- cantos dos jogadores ----
@@ -528,7 +580,7 @@ function seatActions(game: GameState, player: Player): string {
   }
   if (game.phase === "finished") {
     return game.winner === player.id
-      ? `<p class="note big">🏆 Você venceu!</p><button id="new-game" class="primary">Nova partida</button>`
+      ? `<p class="note big">🏆 Você venceu!</p><p class="note">Por: ${winText(game)}.</p><button id="new-game" class="primary">Nova partida</button>`
       : "";
   }
   const battle = battleActions(game, player);
@@ -565,6 +617,31 @@ function seatActions(game: GameState, player: Player): string {
     default:
       return "";
   }
+}
+
+function seatObjectives(game: GameState, player: Player): string {
+  const ids = game.objectives[player.id] ?? [];
+  if (ids.length === 0) return "";
+  const items = ids
+    .map((id) => {
+      const def = objectiveById(id);
+      const { done, text } = def.progress(game, map, player.id);
+      const target =
+        id === "cacada" && game.huntTargets[player.id]
+          ? ` <span class="target-name">(alvo: ${nameOf(playerById(game, game.huntTargets[player.id]!))})</span>`
+          : "";
+      return `<li class="${done ? "done" : ""}" title="${escapeHtml(def.description)}">
+        <span class="obj-title">🎯 ${def.title}${target}</span>
+        <span class="obj-progress">${text}</span>
+      </li>`;
+    })
+    .join("");
+  return `<ul class="objectives">${items}</ul>`;
+}
+
+function winText(game: GameState): string {
+  if (!game.winReason || game.winReason === "ultimo-vivo") return "último jogador vivo";
+  return `objetivo "${objectiveById(game.winReason).title}"`;
 }
 
 function seatHand(game: GameState, player: Player): string {
@@ -611,6 +688,7 @@ function renderSeat(game: GameState, seat: Seat): string {
         ${place}<span class="swatch"></span><b class="seat-name">${nameOf(player)}</b>
         <span class="muted">${out ? "eliminado" : `${owned.length} estados · ${armies} soldados`}</span>
       </div>
+      ${seatObjectives(game, player)}
       ${seatHand(game, player)}
       <div class="seat-body">
         <div class="seat-dice">${seatDice(game, player)}</div>
@@ -640,7 +718,7 @@ function statusText(game: GameState): string {
     case "fortify":
       return `Rodada ${game.round} · ${who} · Remanejamento`;
     case "finished":
-      return `🏆 ${nameOf(playerById(game, game.winner!))} venceu!`;
+      return `🏆 ${nameOf(playerById(game, game.winner!))} venceu — ${winText(game)}!`;
   }
 }
 
@@ -672,7 +750,7 @@ function renderMenu(): string {
           <li>3 cartas iguais ou 3 diferentes valem uma troca por soldados (próxima: +${tradeValue(state.trades)}). Carta de estado seu: +${OWNED_CARD_BONUS} nele. Com ${MAX_HAND} cartas, a troca é obrigatória.</li>
           <li>Remanejar: até 3 soldados de um estado para cada vizinho, sempre deixando 1.</li>
           <li>A partir da rodada 2: 1 soldado a cada 2 estados + bônus de região.</li>
-          <li>Vence o último jogador vivo.</li>
+          <li>Objetivos abertos: cada jogador tem 2 objetivos, visíveis no seu canto. Vence quem cumprir qualquer um deles na sua vez — ou quem for o último vivo.</li>
         </ol>
         <h3>Bônus por região</h3>
         <ul class="regions">${regions}</ul>

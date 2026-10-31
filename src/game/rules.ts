@@ -8,6 +8,7 @@ import {
 } from "./cards";
 import { compareRolls, rollDice, rollDie, type BattleResult } from "./dice";
 import { areNeighbors } from "./map";
+import { completedObjective, dealObjectives } from "./objectives";
 import { resolveOrder } from "./order";
 import type { Card, GameMap, GameState, Player, PlayerId, Rng, TerritoryId } from "./types";
 
@@ -46,8 +47,12 @@ export function createGame(map: GameMap, players: Player[], rng: Rng = Math.rand
   shuffle(map.territories, rng).forEach((t, i) => {
     territories[t.id] = { owner: dealOrder[i % dealOrder.length]!.id, armies: 1 };
   });
-  return {
+  const state: GameState = {
     players,
+    objectives: {},
+    huntTargets: {},
+    eliminatedBy: {},
+    winReason: null,
     hands: Object.fromEntries(players.map((p) => [p.id, []])),
     deck: shuffle(createDeck(map), rng),
     discard: [],
@@ -64,6 +69,8 @@ export function createGame(map: GameMap, players: Player[], rng: Rng = Math.rand
     conqueredThisTurn: false,
     winner: null,
   };
+  dealObjectives(state, map, rng);
+  return state;
 }
 
 // ---- ordem de jogada ----
@@ -140,6 +147,30 @@ export function reinforcementsFor(state: GameState, map: GameMap, player: Player
   return base + bonus;
 }
 
+/**
+ * Vitória: o jogador vence ao cumprir qualquer um dos seus 2 objetivos (na sua vez)
+ * ou ao ser o último jogador vivo.
+ */
+function checkVictory(state: GameState, map: GameMap, player: PlayerId): GameState {
+  if (state.winner) return state;
+  if (alivePlayers(state).length === 1 && territoriesOf(state, player).length > 0) {
+    state.winner = player;
+    state.winReason = "ultimo-vivo";
+  } else {
+    const objective = completedObjective(state, map, player);
+    if (objective) {
+      state.winner = player;
+      state.winReason = objective.id;
+    }
+  }
+  if (state.winner) {
+    state.phase = "finished";
+    state.battle = null;
+    state.pendingReinforcements = 0;
+  }
+  return state;
+}
+
 function assertPhase(state: GameState, ...phases: GameState["phase"][]): void {
   if (!phases.includes(state.phase)) throw new Error(`Ação inválida na fase "${state.phase}"`);
   if (state.battle) throw new Error("Termine o ataque em andamento (rolar os dados)");
@@ -193,6 +224,7 @@ export function placeArmies(
   const next = structuredClone(state);
   next.territories[territory]!.armies += amount;
   next.pendingReinforcements -= amount;
+  if (checkVictory(next, map, currentPlayer(next).id).winner) return next;
   if (next.pendingReinforcements > 0) return next;
 
   if (next.phase === "reinforce") {
@@ -229,7 +261,7 @@ export interface TradeOutcome {
  * Troca 3 cartas por soldados (no reforço). Cartas de estados que o jogador domina
  * dão +2 soldados direto nesses estados.
  */
-export function tradeCards(state: GameState, cardIds: string[]): TradeOutcome {
+export function tradeCards(state: GameState, map: GameMap, cardIds: string[]): TradeOutcome {
   assertPhase(state, "reinforce");
   const player = currentPlayer(state).id;
   const hand = state.hands[player] ?? [];
@@ -250,6 +282,7 @@ export function tradeCards(state: GameState, cardIds: string[]): TradeOutcome {
     .map((c) => c.territory)
     .filter((t): t is TerritoryId => t !== null && next.territories[t]?.owner === player);
   for (const t of bonusTerritories) next.territories[t]!.armies += OWNED_CARD_BONUS;
+  checkVictory(next, map, player);
   return { state: next, armies, bonusTerritories };
 }
 
@@ -348,7 +381,7 @@ function drawCard(state: GameState, player: PlayerId, rng: Rng): Card | null {
  * O maior dado vence; empate é da defesa. Ao conquistar, os soldados que atacaram e
  * sobreviveram ocupam o estado (e o atacante ganha uma carta no fim do turno).
  */
-export function rollDefense(state: GameState, rng: Rng = Math.random): AttackOutcome {
+export function rollDefense(state: GameState, map: GameMap, rng: Rng = Math.random): AttackOutcome {
   const pending = state.battle;
   if (!pending?.attackRolls) throw new Error("O atacante precisa rolar primeiro");
   const next = structuredClone(state);
@@ -370,6 +403,7 @@ export function rollDefense(state: GameState, rng: Rng = Math.random): AttackOut
     next.conqueredThisTurn = true;
     if (territoriesOf(next, pending.defender).length === 0) {
       eliminated = pending.defender;
+      next.eliminatedBy[pending.defender] = pending.attacker;
       // Quem elimina um jogador fica com as cartas dele.
       next.hands[pending.attacker] = [
         ...(next.hands[pending.attacker] ?? []),
@@ -377,10 +411,7 @@ export function rollDefense(state: GameState, rng: Rng = Math.random): AttackOut
       ];
       next.hands[pending.defender] = [];
     }
-    if (alivePlayers(next).length === 1) {
-      next.winner = pending.attacker;
-      next.phase = "finished";
-    }
+    checkVictory(next, map, pending.attacker);
   }
   return { state: next, battle, conquered, eliminated };
 }
@@ -394,7 +425,7 @@ export function attack(
   rng: Rng = Math.random,
   soldiers: number = maxAttackers(state, from),
 ): AttackOutcome {
-  return rollDefense(rollAttack(declareAttack(state, map, from, to, soldiers), rng), rng);
+  return rollDefense(rollAttack(declareAttack(state, map, from, to, soldiers), rng), map, rng);
 }
 
 export function endAttackPhase(state: GameState): GameState {
@@ -443,7 +474,7 @@ export function fortify(
   next.territories[to]!.armies += amount;
   next.fortified[to] = (next.fortified[to] ?? 0) + amount;
   next.fortifyMoves[`${from}>${to}`] = (next.fortifyMoves[`${from}>${to}`] ?? 0) + amount;
-  return next;
+  return checkVictory(next, map, currentPlayer(next).id);
 }
 
 /**

@@ -771,3 +771,64 @@ button.primary {
   opacity: 0.45;
   text-decoration: line-through;
 }
+
+/* ---- regiões (destaque discreto) ---- */
+.board .region-outline path {
+  fill: none;
+  stroke-width: 5;
+  stroke-linejoin: round;
+  stroke-opacity: 0.75;
+}
+
+.board .regions {
+  pointer-events: none;
+}
+
+.board .region-label text {
+  font-size: 10px;
+  font-weight: 800;
+  text-anchor: middle;
+}
+
+.board .region-label rect {
+  stroke-width: 1.2;
+}
+
+/* ---- objetivos abertos ---- */
+.objectives {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.85rem;
+}
+
+.objectives li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: #0000000d;
+}
+
+.objectives li.done {
+  background: #fff3c4;
+  font-weight: 700;
+}
+
+.obj-title {
+  font-weight: 700;
+}
+
+.obj-progress {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.target-name {
+  font-weight: 400;
+  color: var(--muted);
+}

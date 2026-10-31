@@ -51,9 +51,42 @@ Valores marcados com ⚙️ são configuráveis no código (`src/game/rules.ts` 
 9. **Reforço:** a partir da **rodada 2**, no começo da sua vez, o jogador ganha **1 soldado a cada
    2 estados** ⚙️ que possui, mais o bônus de cada região que dominar inteira, e pode **trocar
    cartas** por mais soldados.
-10. **Vitória:** quem perde todos os estados está fora. **Vence o último jogador vivo.**
+10. **Vitória:** vence quem, **na sua vez**, cumprir **qualquer um dos seus 2 objetivos abertos**
+    (veja abaixo) — ou quem for o **último jogador vivo**. Quem perde todos os estados está fora.
+
+### Objetivos abertos 🎯
+
+Cada jogador recebe **2 objetivos**, sorteados no começo e **visíveis para todos** no seu canto, com
+o progresso de cada um. Basta cumprir **um** deles. Como os adversários não conseguem bloquear os
+dois caminhos ao mesmo tempo, saber o objetivo do outro vira estratégia — e não trava o jogo.
+
+- Um objetivo é **flexível** (caminho ou contagem, com várias formas de cumprir) e o outro é
+  **focado** (região ou estados-chave).
+- Ninguém recebe o mesmo objetivo de outro jogador, nem um objetivo que já comece cumprido.
+- **"Último vivo"** continua valendo como vitória.
+
+| Tipo     | Objetivo                    | Como cumprir                                                           |
+| -------- | --------------------------- | ---------------------------------------------------------------------- |
+| Flexível | **Do Oiapoque ao Chuí**     | Ligar o Amapá ao Rio Grande do Sul por estados seus, sem interrupção   |
+| Flexível | **Do Acre ao mar**          | Ligar o Acre a qualquer estado do litoral do Nordeste por estados seus |
+| Flexível | **Senhor da costa**         | Dominar 10 dos 17 estados do litoral                                   |
+| Flexível | **Ocupação**                | Ter 16 dos 26 territórios                                              |
+| Flexível | **Fortaleza**               | Ter 12 territórios com pelo menos 2 soldados em cada                   |
+| Focado   | **Rio São Francisco**       | Dominar MG, BA, PE, AL e SE ao mesmo tempo                             |
+| Focado   | **Amazônia Legal**          | Dominar 7 de AC, AM, AP, PA, RO, RR, TO, MT e MA                       |
+| Focado   | **Eixo do poder**           | Dominar SP, RJ, MG e Goiás/DF ao mesmo tempo                           |
+| Focado   | **Guardião das fronteiras** | Dominar 8 dos 11 estados que fazem fronteira com outros países         |
+| Focado   | **Nordeste e Sul**          | Dominar as duas regiões inteiras                                       |
+| Focado   | **Norte e Centro-Oeste**    | Dominar as duas regiões inteiras                                       |
+| Focado   | **Sudeste e Sul + 3**       | Dominar as duas regiões inteiras e mais 3 territórios quaisquer        |
+| Focado   | **Caçada** (3–4 jogadores)  | Eliminar o próximo jogador da roda; se outro eliminá-lo, vira ter 16   |
+
+Os números (16 territórios, 10 do litoral etc.) ⚙️ serão calibrados com as partidas de teste.
 
 ### Bônus por região ⚙️
+
+As regiões aparecem no mapa com um **contorno discreto** na cor de cada uma e uma etiqueta com o
+nome e o bônus; quando alguém domina a região inteira, a etiqueta fica na cor desse jogador.
 
 | Região       | Estados                            | Qtde | Bônus |
 | ------------ | ---------------------------------- | ---- | ----- |
@@ -92,7 +125,7 @@ jogador.
 - **Dados como se fossem físicos**, no canto de cada jogador: **vermelho ataca, amarelo defende**.
   Cada um rola o seu, no seu lado. Eles chacoalham antes de parar; os que perderam a comparação
   ficam apagados. Quem está sendo atacado tem o canto aceso em amarelo.
-- **Cartas** visíveis no canto de cada jogador.
+- **Cartas** e **objetivos** visíveis no canto de cada jogador.
 - **Soldadinhos como peças físicas**, na borda de cada jogador: os soldados ainda a posicionar
   ficam ali e vão saindo conforme são colocados no mapa.
 - O canto do jogador da vez fica aceso na cor dele, com as instruções e os botões da jogada.
@@ -106,16 +139,11 @@ jogador.
   **⛶ tela cheia** e **☰ menu** (regras, bônus, histórico e nova partida).
 - O celular terá um layout próprio depois.
 
-## Próximas alterações (anotadas, ainda não implementadas)
-
-- [ ] **Bônus por região:** manter o bônus de cada região (Norte +5, Nordeste +5, Centro-Oeste +3,
-      Sudeste +3, Sul +2) e **destacar as regiões no mapa de forma discreta** (por exemplo, um
-      contorno mais grosso ou uma leve tonalidade em volta de cada região, com o nome e o bônus).
-
 ## Em aberto (para decidir)
 
 - [ ] **Ataque entre estados sem divisa** (antigo ataque pelo mar, com penalidade nos dados):
       retirado por enquanto — só se ataca quem faz divisa. A numeração do litoral continua nos
       dados do mapa (`coastIndex`) caso a ideia volte de outra forma.
 - [ ] **Mínimo de reforço:** hoje, quem tem só 1 estado e nenhuma região não recebe soldados.
-- [ ] **Objetivos**, como no War clássico?
+- [ ] **Calibrar objetivos:** alguns podem começar perto de serem cumpridos (ex.: 3/4 no Eixo do
+      poder). Ajustar números ou evitar no sorteio objetivos muito adiantados.

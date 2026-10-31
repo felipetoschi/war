@@ -10,7 +10,8 @@ no **mapa do Brasil** — 26 territórios (os estados, com Goiás/DF juntos), na
 - **Cartas de troca** (■ ▲ ● e coringa ★), visíveis para todos: uma por turno com conquista, trocadas por soldados.
 - **Sons e música** de marcha militar, gerados pelo próprio jogo (sem arquivos de áudio).
 - **Soldadinhos** na borda de cada jogador. Só se ataca estado que faz divisa.
-- Reforço: 1 soldado a cada 2 estados, a partir da rodada 2. **Vence o último vivo.**
+- Reforço: 1 soldado a cada 2 estados + bônus de região, a partir da rodada 2.
+- **2 objetivos abertos** por jogador (vence quem cumprir qualquer um) — ou o último vivo.
 
 📖 As regras completas, e o que ainda está em aberto, estão em [docs/REGRAS.md](docs/REGRAS.md).
 
@@ -37,6 +38,7 @@ src/
     map.ts         # consultas ao mapa (vizinhança)
     cards.ts       # cartas de troca: baralho, trocas válidas e valor da troca
     dice.ts        # rolagem e comparação de dados
+    objectives.ts  # objetivos abertos: definições, progresso e sorteio
     order.ts       # dados para decidir a ordem de jogada (com desempate)
     rules.ts       # regras: sorteio dos estados, ordem de jogada, reforço, trocas, ataque em
                    # 3 passos (declarar, rolar ataque, rolar defesa), conquista,

@@ -46,6 +46,8 @@ function stateWith(owned: Record<string, number>, phase: GameState["phase"] = "a
   }
   return {
     ...createGame(map, players),
+    // sem objetivos por padrão, para os testes não terminarem a partida sem querer
+    objectives: { a: [], b: [] },
     territories,
     phase,
     round: 1,
@@ -167,12 +169,12 @@ describe("dados manuais: atacante rola, depois defensor", () => {
   it("declara, rola o ataque e depois a defesa", () => {
     let state = declareAttack(stateWith({ sp: 5 }), map, "sp", "mg", 2);
     expect(state.battle).toMatchObject({ soldiers: 2, defenseDice: 1, attackRolls: null });
-    expect(() => rollDefense(state)).toThrow(); // defensor não rola antes do atacante
+    expect(() => rollDefense(state, map)).toThrow(); // defensor não rola antes do atacante
     expect(() => endAttackPhase(state)).toThrow(); // ataque em andamento
     state = rollAttack(state, seq(0.99, 0.99));
     expect(state.battle!.attackRolls).toEqual([6, 6]);
     expect(() => cancelAttack(state)).toThrow(); // depois de rolar, não dá para desistir
-    const result = rollDefense(state, seq(0));
+    const result = rollDefense(state, map, seq(0));
     expect(result.battle.defenseRolls).toEqual([1]);
     expect(result.conquered).toBe(true);
     expect(result.state.battle).toBeNull();
@@ -241,7 +243,7 @@ describe("cartas de troca", () => {
         b: [],
       },
     };
-    const { state: next, armies, bonusTerritories } = tradeCards(state, ["sp", "ba", "mg"]);
+    const { state: next, armies, bonusTerritories } = tradeCards(state, map, ["sp", "ba", "mg"]);
     expect(armies).toBe(4);
     expect(next.pendingReinforcements).toBe(4);
     expect(bonusTerritories.sort()).toEqual(["mg", "sp"]);
@@ -257,7 +259,7 @@ describe("cartas de troca", () => {
       ...stateWith({ sp: 1 }, "reinforce"),
       hands: { a: [card("sp", "square"), card("ba", "square"), card("mg", "circle")], b: [] },
     };
-    expect(() => tradeCards(state, ["sp", "ba", "mg"])).toThrow();
+    expect(() => tradeCards(state, map, ["sp", "ba", "mg"])).toThrow();
   });
 
   it("com 5 cartas ou mais, é obrigatório trocar antes de posicionar", () => {
@@ -268,7 +270,7 @@ describe("cartas de troca", () => {
       hands: { a: hand, b: [] },
     };
     expect(() => placeArmies(state, map, "sp", 1)).toThrow();
-    const traded = tradeCards(state, ["sp", "ba", "mg"]).state;
+    const traded = tradeCards(state, map, ["sp", "ba", "mg"]).state;
     expect(() => placeArmies(traded, map, "sp", 1)).not.toThrow();
   });
 

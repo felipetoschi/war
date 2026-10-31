@@ -76,6 +76,14 @@ export interface PendingBattle {
 export interface GameState {
   /** Jogadores na ordem de jogada (definida pelos dados na fase "order"). */
   players: Player[];
+  /** Os 2 objetivos abertos de cada jogador (ids de `OBJECTIVES`). */
+  objectives: Record<PlayerId, string[]>;
+  /** Alvo de cada jogador no objetivo de caçada. */
+  huntTargets: Partial<Record<PlayerId, PlayerId>>;
+  /** Quem eliminou cada jogador eliminado. */
+  eliminatedBy: Partial<Record<PlayerId, PlayerId>>;
+  /** Como o vencedor ganhou: id do objetivo cumprido, ou "ultimo-vivo". */
+  winReason: string | null;
   /** Cartas de cada jogador — visíveis para todos. */
   hands: Record<PlayerId, Card[]>;
   /** Monte de compra (já embaralhado) e cartas já trocadas. */

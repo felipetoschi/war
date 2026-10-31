@@ -54,3 +54,12 @@ export const LABELS: Record<string, Label> = {
   sc: { x: 365, y: 530 },
   rs: { x: 315, y: 585 },
 };
+
+/** Onde fica a etiqueta de cada região (nome e bônus), em áreas de mar ou fora do país. */
+export const REGION_LABELS: Record<string, { x: number; y: number }> = {
+  norte: { x: 75, y: 40 },
+  nordeste: { x: 610, y: 100 },
+  "centro-oeste": { x: 150, y: 420 },
+  sudeste: { x: 615, y: 515 },
+  sul: { x: 205, y: 572 },
+};
