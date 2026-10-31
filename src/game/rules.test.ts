@@ -4,7 +4,6 @@ import {
   attack,
   attackPenalty,
   canAttack,
-  claimTerritory,
   createGame,
   endAttackPhase,
   endTurn,
@@ -13,6 +12,8 @@ import {
   movableArmies,
   navalPenalty,
   placeArmies,
+  playersToRollForOrder,
+  rollForOrder,
   reinforcementsFor,
   territoriesOf,
 } from "./rules";
@@ -37,58 +38,69 @@ function stateWith(owned: Record<string, number>, phase: GameState["phase"] = "a
       t.id in owned ? { owner: "a", armies: owned[t.id]! } : { owner: "b", armies: 1 };
   }
   return {
-    ...createGame(players),
+    ...createGame(map, players),
     territories,
     phase,
     round: 1,
   };
 }
 
-describe("createGame", () => {
-  it("começa na escolha de estados, com todos os estados livres", () => {
-    const game = createGame(players);
-    expect(game.phase).toBe("claim");
-    expect(Object.keys(game.territories)).toHaveLength(0);
+describe("createGame: sorteio dos estados", () => {
+  it("sorteia os 27 estados entre os jogadores, 1 soldado em cada", () => {
+    const game = createGame(map, players, seq(0.3, 0.7, 0.1, 0.9));
+    expect(Object.keys(game.territories)).toHaveLength(27);
+    expect(Object.values(game.territories).every((t) => t!.armies === 1)).toBe(true);
+    const counts = players.map((p) => territoriesOf(game, p.id).length).sort();
+    expect(counts).toEqual([13, 14]);
+    expect(game.phase).toBe("order");
+  });
+
+  it("divide o mais igualmente possível com 5 jogadores", () => {
+    const five = [1, 2, 3, 4, 5].map((n) => ({ id: `p${n}`, name: `P${n}`, color: "#000" }));
+    const game = createGame(map, five, seq(0.42, 0.13, 0.77));
+    const counts = five.map((p) => territoriesOf(game, p.id).length).sort();
+    expect(counts).toEqual([5, 5, 5, 6, 6]);
   });
 
   it("aceita de 2 a 5 jogadores", () => {
     const many = [1, 2, 3, 4, 5, 6].map((n) => ({ id: `p${n}`, name: `P${n}`, color: "#000" }));
-    expect(() => createGame(many.slice(0, 1))).toThrow();
-    expect(() => createGame(many.slice(0, 5))).not.toThrow();
-    expect(() => createGame(many)).toThrow();
+    expect(() => createGame(map, many.slice(0, 1))).toThrow();
+    expect(() => createGame(map, many.slice(0, 5))).not.toThrow();
+    expect(() => createGame(map, many)).toThrow();
   });
 });
 
-describe("escolha de estados e rodada inicial", () => {
-  /** Os jogadores escolhem os estados em sequência, na ordem do mapa. */
-  function claimAll(): GameState {
-    let game = createGame(players);
-    for (const t of map.territories) game = claimTerritory(game, map, t.id);
-    return game;
-  }
+describe("dados para a ordem de jogada e rodada inicial", () => {
+  /** rng que faz rollDie tirar exatamente `face` (1–6) */
+  const face = (n: number) => () => (n - 1) / 6;
 
-  it("alterna os jogadores e dá 1 soldado em cada estado escolhido", () => {
-    let game = createGame(players);
-    game = claimTerritory(game, map, "sp");
-    expect(game.territories.sp).toEqual({ owner: "a", armies: 1 });
-    expect(game.currentPlayerIndex).toBe(1);
-    expect(() => claimTerritory(game, map, "sp")).toThrow();
-    game = claimTerritory(game, map, "rj");
-    expect(game.territories.rj!.owner).toBe("b");
-    expect(game.currentPlayerIndex).toBe(0);
-  });
-
-  it("depois de escolher os 27, começa a rodada inicial pelo primeiro jogador", () => {
-    const game = claimAll();
-    expect(territoriesOf(game, "a")).toHaveLength(14);
-    expect(territoriesOf(game, "b")).toHaveLength(13);
+  it("quem tira mais começa; a rodada inicial começa por ele", () => {
+    let game = createGame(map, players);
+    expect(playersToRollForOrder(game)).toEqual(["a", "b"]);
+    game = rollForOrder(game, map, "a", face(2));
+    expect(() => rollForOrder(game, map, "a", face(6))).toThrow(); // já rolou
+    game = rollForOrder(game, map, "b", face(5));
+    expect(game.players.map((p) => p.id)).toEqual(["b", "a"]);
     expect(game.phase).toBe("placement");
     expect(game.currentPlayerIndex).toBe(0);
-    expect(game.pendingReinforcements).toBe(reinforcementsFor(game, map, "a"));
+    expect(game.pendingReinforcements).toBe(reinforcementsFor(game, map, "b"));
+  });
+
+  it("empatados rolam de novo", () => {
+    let game = createGame(map, players);
+    game = rollForOrder(game, map, "a", face(4));
+    game = rollForOrder(game, map, "b", face(4));
+    expect(game.phase).toBe("order");
+    expect(playersToRollForOrder(game)).toEqual(["a", "b"]);
+    game = rollForOrder(game, map, "a", face(6));
+    game = rollForOrder(game, map, "b", face(1));
+    expect(game.players.map((p) => p.id)).toEqual(["a", "b"]);
   });
 
   it("na rodada inicial todos posicionam e depois o primeiro começa o turno normal", () => {
-    let game = claimAll();
+    let game = createGame(map, players);
+    game = rollForOrder(game, map, "a", face(6));
+    game = rollForOrder(game, map, "b", face(1));
     const first = territoriesOf(game, "a")[0]!;
     game = placeArmies(game, map, first, game.pendingReinforcements);
     expect(game.phase).toBe("placement");

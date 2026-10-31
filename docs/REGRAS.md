@@ -12,6 +12,11 @@ Valores marcados com ⚙️ são configuráveis no código e podem ser ajustados
 - **Combate com dados virtuais**, como no War clássico (até 3 dados de ataque contra até 3 de defesa).
 - **Diferencial — ataque naval:** estados do litoral podem atacar outros estados do litoral,
   mesmo sem fazer fronteira com eles, mas com **penalidade nos dados proporcional à distância**.
+- **Dados virtuais visíveis**, com pontinhos, como os de bozó: eles chacoalham na tela e só
+  depois o resultado aparece no mapa. Ataque em vermelho, defesa em branco; os dados que perderam
+  a comparação ficam apagados.
+- **Mapa sempre no centro**, com as informações nas laterais (tablet deitado) ou em cima e
+  embaixo (tablet em pé).
 - Botão de **tela cheia** no canto superior direito.
 
 ## Regiões e bônus
@@ -30,11 +35,9 @@ soldados extras sempre que for posicionar soldados.
 ## Preparação
 
 1. **Jogadores:** escolhe-se de 2 a 5 jogadores e o nome de cada um.
-2. **Quem começa:** cada jogador rola um dado virtual. Quem tirar mais joga primeiro, e a ordem
-   segue do maior para o menor. Empatados rolam de novo entre si até desempatar.
-3. **Escolha dos estados:** seguindo a ordem de jogada, cada jogador escolhe **um estado livre
-   por vez** no mapa, até os 27 terem dono. Cada estado escolhido recebe **1 soldado**.
-   Com 27 estados, a divisão fica:
+2. **Sorteio dos estados:** os 27 estados são **sorteados aleatoriamente** entre os jogadores,
+   o mais igualmente possível, com **1 soldado** em cada. Quem fica com os estados que sobram
+   na divisão também é sorteado.
 
    | Jogadores | Estados por jogador |
    | --------- | ------------------- |
@@ -43,6 +46,8 @@ soldados extras sempre que for posicionar soldados.
    | 4         | 7, 7, 7, 6          |
    | 5         | 6, 6, 5, 5, 5       |
 
+3. **Quem começa:** com o mapa já distribuído, cada jogador rola um dado virtual. Quem tirar mais
+   joga primeiro, e a ordem segue do maior para o menor. Empatados rolam de novo entre si.
 4. **Rodada inicial:** na ordem de jogada, cada jogador posiciona soldados nos seus estados pela
    regra clássica (abaixo). **Nesta rodada ninguém ataca.** Depois do último jogador,
    começa a rodada 1, de novo pelo primeiro.

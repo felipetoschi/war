@@ -1,5 +1,6 @@
-import { compareRolls, rollDice, type BattleResult } from "./dice";
+import { compareRolls, rollDice, rollDie, type BattleResult } from "./dice";
 import { areNeighbors, coastDistance } from "./map";
+import { resolveOrder } from "./order";
 import type { GameMap, GameState, Player, PlayerId, Rng, TerritoryId } from "./types";
 
 export const MIN_PLAYERS = 2;
@@ -18,25 +19,79 @@ export function navalPenalty(distance: number): number {
   return 3;
 }
 
+function shuffle<T>(items: T[], rng: Rng): T[] {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [copy[i], copy[j]] = [copy[j]!, copy[i]!];
+  }
+  return copy;
+}
+
 /**
- * Cria uma partida. `players` já deve vir na ordem de jogada (decidida nos dados).
- * A partida começa com a escolha de estados, todos ainda sem dono.
+ * Cria uma partida: os 27 estados são sorteados entre os jogadores (1 soldado em cada),
+ * o mais igualmente possível. Em seguida, os dados decidem a ordem de jogada (`rollForOrder`).
  */
-export function createGame(players: Player[]): GameState {
+export function createGame(map: GameMap, players: Player[], rng: Rng = Math.random): GameState {
   if (players.length < MIN_PLAYERS || players.length > MAX_PLAYERS) {
     throw new Error(`O jogo aceita de ${MIN_PLAYERS} a ${MAX_PLAYERS} jogadores`);
   }
+  // Quem recebe os estados que sobram na divisão também é sorteado.
+  const dealOrder = shuffle(players, rng);
+  const territories: GameState["territories"] = {};
+  shuffle(map.territories, rng).forEach((t, i) => {
+    territories[t.id] = { owner: dealOrder[i % dealOrder.length]!.id, armies: 1 };
+  });
   return {
     players,
-    territories: {},
+    territories,
+    orderRolls: {},
     currentPlayerIndex: 0,
-    phase: "claim",
+    phase: "order",
     round: 0,
     pendingReinforcements: 0,
     pendingMove: null,
     fortified: {},
     winner: null,
   };
+}
+
+/** Jogadores que ainda precisam rolar o dado para decidir a ordem. */
+export function playersToRollForOrder(state: GameState): PlayerId[] {
+  if (state.phase !== "order") return [];
+  return resolveOrder(
+    state.players.map((p) => p.id),
+    state.orderRolls,
+  ).pending;
+}
+
+/**
+ * Um jogador rola o dado para decidir a ordem de jogada. Quando a ordem fica definida,
+ * os jogadores são reordenados e começa a rodada inicial pelo primeiro.
+ */
+export function rollForOrder(
+  state: GameState,
+  map: GameMap,
+  player: PlayerId,
+  rng: Rng = Math.random,
+): GameState {
+  assertPhase(state, "order");
+  if (!playersToRollForOrder(state).includes(player)) {
+    throw new Error("Esse jogador não precisa rolar agora");
+  }
+  const next = structuredClone(state);
+  next.orderRolls[player] = [...(next.orderRolls[player] ?? []), rollDie(rng)];
+  const { order } = resolveOrder(
+    next.players.map((p) => p.id),
+    next.orderRolls,
+  );
+  if (order) {
+    next.players = order.map((id) => next.players.find((p) => p.id === id)!);
+    next.phase = "placement";
+    next.currentPlayerIndex = 0;
+    next.pendingReinforcements = reinforcementsFor(next, map, next.players[0]!.id);
+  }
+  return next;
 }
 
 export function currentPlayer(state: GameState): Player {
@@ -92,25 +147,6 @@ function startTurn(state: GameState, map: GameMap, index: number): GameState {
   state.fortified = {};
   state.pendingReinforcements = reinforcementsFor(state, map, state.players[index]!.id);
   return state;
-}
-
-/** Escolha de estados: cada jogador, na sua vez, pega um estado livre (com 1 soldado). */
-export function claimTerritory(state: GameState, map: GameMap, territory: TerritoryId): GameState {
-  assertPhase(state, "claim");
-  if (!map.territories.some((t) => t.id === territory)) {
-    throw new Error(`Estado desconhecido: ${territory}`);
-  }
-  if (state.territories[territory]) throw new Error("Esse estado já foi escolhido");
-  const next = structuredClone(state);
-  next.territories[territory] = { owner: currentPlayer(state).id, armies: 1 };
-  next.currentPlayerIndex = (state.currentPlayerIndex + 1) % state.players.length;
-
-  if (Object.keys(next.territories).length === map.territories.length) {
-    next.phase = "placement";
-    next.currentPlayerIndex = 0;
-    next.pendingReinforcements = reinforcementsFor(next, map, next.players[0]!.id);
-  }
-  return next;
 }
 
 /** Posiciona soldados na rodada inicial ou no reforço do turno. */

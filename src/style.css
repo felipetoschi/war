@@ -6,7 +6,7 @@
   --muted: #9fb0c3;
   --accent: #f5c542;
   --attack: #d63c31;
-  --defense: #f0c419;
+  --defense: #f4f1e8;
   font-family:
     system-ui,
     -apple-system,
@@ -25,20 +25,15 @@ body {
   margin: 0;
   min-height: 100vh;
   background: var(--bg);
-  /* toque: sem zoom no duplo toque, sem destaque azul e sem seleção de texto no mapa */
+  /* toque: sem zoom no duplo toque e sem destaque azul */
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
 
-.board {
-  -webkit-user-select: none;
-  user-select: none;
-}
-
 #app {
-  max-width: 1280px;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: 12px 16px 24px;
+  padding: 12px 16px;
 }
 
 /* ---- barra superior ---- */
@@ -55,110 +50,7 @@ body {
   font-size: 1.4rem;
 }
 
-/* ---- layout do jogo (pensado para tablet) ---- */
-.layout {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: 1fr 340px;
-  align-items: start;
-}
-
-.panel-main,
-.panel-side {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-/* Tablet deitado (e computador): mapa e painel lado a lado, tudo dentro da tela. */
-@media (min-width: 900px) and (orientation: landscape) {
-  #app.in-game {
-    height: 100vh;
-    height: 100dvh;
-    display: flex;
-    flex-direction: column;
-    padding-bottom: 12px;
-  }
-
-  #app.in-game .layout {
-    flex: 1;
-    min-height: 0;
-    align-items: stretch;
-  }
-
-  #app.in-game main {
-    min-height: 0;
-  }
-
-  #app.in-game .board {
-    height: 100%;
-  }
-
-  #app.in-game .panel {
-    min-height: 0;
-    overflow-y: auto;
-  }
-}
-
-/* Tablet em pé: mapa em cima, painel embaixo em duas colunas. */
-@media (orientation: portrait), (max-width: 899px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (min-width: 600px) and (orientation: portrait) {
-  #app.in-game {
-    height: 100vh;
-    height: 100dvh;
-    display: flex;
-    flex-direction: column;
-    padding-bottom: 12px;
-  }
-
-  #app.in-game .layout {
-    flex: 1;
-    min-height: 0;
-    grid-template-rows: auto minmax(0, 1fr);
-    align-items: stretch;
-  }
-
-  #app.in-game .panel {
-    min-height: 0;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    align-items: start;
-    gap: 16px;
-    overflow: hidden;
-  }
-
-  #app.in-game .panel-main,
-  #app.in-game .panel-side {
-    max-height: 100%;
-    overflow-y: auto;
-  }
-}
-
-.center {
-  display: flex;
-  justify-content: center;
-}
-
-.card,
-.panel {
-  background: var(--panel);
-  border-radius: 12px;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.setup {
-  width: 100%;
-  max-width: 520px;
-}
-
+/* ---- textos ---- */
 h2,
 h3 {
   margin: 0;
@@ -170,7 +62,6 @@ h2 {
 
 h3 {
   font-size: 0.95rem;
-  margin-top: 4px;
 }
 
 p {
@@ -182,6 +73,11 @@ p {
   color: var(--muted);
   font-size: 0.85rem;
   font-weight: 400;
+}
+
+.warn {
+  color: var(--accent);
+  font-weight: 600;
 }
 
 /* ---- botões ---- */
@@ -205,7 +101,7 @@ button.link {
   background: none;
   color: var(--muted);
   text-decoration: underline;
-  padding: 4px;
+  padding: 4px 0;
   align-self: flex-start;
 }
 
@@ -237,8 +133,8 @@ button:disabled {
 }
 
 .chips.small .chip {
-  min-width: 40px;
-  padding: 6px 10px;
+  min-width: 44px;
+  padding: 8px 10px;
 }
 
 .chip.active {
@@ -247,6 +143,25 @@ button:disabled {
 }
 
 /* ---- tela de jogadores ---- */
+.center {
+  display: flex;
+  justify-content: center;
+}
+
+.card {
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.setup {
+  width: 100%;
+  max-width: 520px;
+}
+
 .names {
   display: flex;
   flex-direction: column;
@@ -269,7 +184,220 @@ button:disabled {
   color: var(--text);
 }
 
-/* ---- ordem de jogada ---- */
+/* ---- layout do jogo: mapa sempre no centro ---- */
+.layout {
+  display: grid;
+  gap: 12px;
+  grid-template-areas: "left" "map" "right";
+}
+
+.side-left {
+  grid-area: left;
+}
+
+.board-wrap {
+  grid-area: map;
+  min-width: 0;
+  min-height: 0;
+}
+
+.side-right {
+  grid-area: right;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.box {
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Tablet deitado (e computador): informações nas laterais, mapa no meio. */
+@media (min-width: 900px) and (orientation: landscape) {
+  #app.in-game {
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #app.in-game .layout {
+    flex: 1;
+    min-height: 0;
+    grid-template-areas: "left map right";
+    grid-template-columns: 270px minmax(0, 1fr) 240px;
+  }
+
+  #app.in-game .side {
+    overflow-y: auto;
+  }
+
+  #app.in-game .board {
+    height: 100%;
+  }
+}
+
+/* Tablet em pé: informações em cima e embaixo, mapa no meio. */
+@media (min-width: 600px) and (orientation: portrait) {
+  #app.in-game {
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #app.in-game .layout {
+    flex: 1;
+    min-height: 0;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  #app.in-game .side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+
+  #app.in-game .side-left .box:only-child {
+    grid-column: 1 / -1;
+  }
+
+  #app.in-game .side-right {
+    max-height: 26vh;
+    overflow-y: auto;
+  }
+
+  #app.in-game .board {
+    height: 100%;
+  }
+}
+
+/* ---- dados com pontinhos (estilo bozó) ---- */
+.die3d {
+  --size: 52px;
+  width: var(--size);
+  height: var(--size);
+  padding: calc(var(--size) * 0.14);
+  border-radius: calc(var(--size) * 0.2);
+  display: inline-grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  place-items: center;
+  background: var(--defense);
+  box-shadow:
+    inset 0 -4px 0 #0002,
+    inset 0 2px 0 #fff8,
+    0 3px 6px #0006;
+  transition: opacity 0.2s;
+  flex: none;
+}
+
+.die3d.md {
+  --size: 38px;
+}
+
+.die3d i {
+  width: 70%;
+  height: 70%;
+  border-radius: 50%;
+}
+
+.die3d i.on {
+  background: #1a1a1a;
+  box-shadow: inset 0 1px 1px #0008;
+}
+
+.die3d.attack {
+  background: var(--attack);
+}
+
+.die3d.attack i.on {
+  background: #fff;
+}
+
+.die3d.lost {
+  opacity: 0.35;
+  filter: grayscale(0.6);
+}
+
+.die3d.rolling {
+  animation: tumble 0.3s ease-in-out infinite;
+}
+
+@keyframes tumble {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  25% {
+    transform: translate(-3px, -6px) rotate(-18deg);
+  }
+  50% {
+    transform: translate(2px, 0) rotate(12deg);
+  }
+  75% {
+    transform: translate(3px, -4px) rotate(-8deg);
+  }
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .die3d.rolling {
+    animation: none;
+  }
+}
+
+/* bandeja de dados da batalha */
+.tray {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tray-title {
+  font-weight: 700;
+}
+
+.tray-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.tray-label {
+  width: 56px;
+  align-self: center;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.die-slot {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.die-slot small {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.tray-summary {
+  font-weight: 600;
+}
+
+/* ordem de jogada */
 .order {
   list-style: none;
   margin: 0;
@@ -282,87 +410,26 @@ button:disabled {
 .order li {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 44px;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 54px;
   padding: 6px 10px;
   background: var(--panel-2);
   border-radius: 8px;
 }
 
 .order .who {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   flex: 1;
-}
-
-.order .place {
-  font-weight: 800;
-  color: var(--accent);
-  width: 28px;
+  min-width: 90px;
 }
 
 .order .dice {
   display: flex;
-  gap: 4px;
+  gap: 6px;
 }
 
 .roll {
-  padding: 6px 10px;
-}
-
-/* ---- dados ---- */
-.die {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  font-weight: 800;
-  background: #fff;
-  color: #1a1a1a;
-  box-shadow: inset 0 -2px 0 #0003;
-}
-
-.die.attack {
-  background: var(--attack);
-  color: #fff;
-}
-
-.die.defense {
-  background: var(--defense);
-}
-
-.battle {
-  background: var(--panel-2);
-  border-radius: 8px;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.battle-title {
-  font-weight: 700;
-}
-
-.battle-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.battle-row > span:first-child {
-  width: 56px;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.battle-row sub {
-  color: var(--muted);
-  margin-left: -4px;
-  margin-right: 4px;
+  padding: 8px 10px;
 }
 
 /* ---- mapa ---- */
@@ -372,6 +439,8 @@ button:disabled {
   background: #1d4e6e;
   border-radius: 12px;
   display: block;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .board .state {
@@ -385,19 +454,23 @@ button:disabled {
   .board .state:hover {
     filter: brightness(1.15);
   }
-
-  .board .state.free:hover {
-    filter: brightness(0.85);
-  }
-}
-
-.board .hit {
-  fill: transparent;
 }
 
 .board .state.selected {
   stroke: var(--accent);
   stroke-width: 3;
+}
+
+.board .state.defending {
+  stroke: #fff;
+  stroke-width: 3;
+  animation: pulse 0.45s ease-in-out infinite alternate;
+}
+
+@keyframes pulse {
+  to {
+    filter: brightness(1.35);
+  }
 }
 
 .board .state.target {
@@ -415,15 +488,13 @@ button:disabled {
   cursor: pointer;
 }
 
+.board .hit {
+  fill: transparent;
+}
+
 .board .badge {
   stroke: #fff;
   stroke-width: 1.5;
-}
-
-.board .badge.empty {
-  fill: #fff8;
-  stroke: #0f1b2a;
-  stroke-width: 1;
 }
 
 .board .leader {
@@ -463,7 +534,7 @@ button:disabled {
   stroke-width: 2.5px;
 }
 
-/* ---- painel ---- */
+/* ---- painéis ---- */
 .swatch {
   width: 14px;
   height: 14px;
@@ -490,6 +561,17 @@ button:disabled {
   border: 1px solid transparent;
 }
 
+.players li .muted {
+  display: block;
+  margin-left: 20px;
+}
+
+.players .place {
+  color: var(--accent);
+  font-weight: 800;
+  margin-right: 6px;
+}
+
 .players li.current {
   border-color: var(--accent);
 }
@@ -506,16 +588,16 @@ button:disabled {
 }
 
 .log {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--muted);
-  max-height: 200px;
+  max-height: 180px;
   overflow-y: auto;
   margin: 0;
   padding-left: 18px;
 }
 
 .credits {
-  margin: 16px 0 0;
+  margin: 12px 0 0;
   font-size: 0.75rem;
   color: var(--muted);
   text-align: center;

@@ -3,8 +3,9 @@
 Jogo de estratégia por turnos, de conquista de territórios, que roda no navegador,
 jogado no **mapa do Brasil** — 26 estados + Distrito Federal, agrupados nas 5 regiões.
 
-- De **2 a 5 jogadores** no mesmo aparelho; **dados virtuais** decidem quem começa.
-- Os jogadores **escolhem os estados** um a um e posicionam os soldados pela regra clássica.
+- De **2 a 5 jogadores** no mesmo aparelho.
+- Os 27 estados são **sorteados** entre os jogadores; depois, **dados virtuais** decidem quem começa.
+- Dados com pontinhos, estilo bozó, que chacoalham na tela antes do resultado.
 - Combate no estilo do War clássico: até 3 dados de ataque contra até 3 de defesa; empate favorece a defesa.
 - **Ataque naval ⚓:** estados do litoral atacam outros do litoral, mesmo sem fronteira,
   com penalidade nos dados que aumenta com a distância (ex.: RN → RS tem −3 em cada dado).
@@ -37,10 +38,11 @@ src/
     map.ts         # consultas ao mapa (vizinhança, distância no litoral)
     dice.ts        # rolagem e comparação de dados (com penalidade)
     order.ts       # dados para decidir a ordem de jogada (com desempate)
-    rules.ts       # regras: escolha de estados, reforço, ataque (terra/mar), conquista,
+    rules.ts       # regras: sorteio dos estados, ordem de jogada, reforço, ataque (terra/mar), conquista,
                    # remanejamento, turnos, vitória
   ui/
     brasil-svg.ts  # contornos dos estados e posição dos marcadores
+    dice.ts        # dados com pontinhos e animação de rolagem
     fullscreen.ts  # botão de tela cheia
   main.ts          # interface (mapa em SVG)
   style.css
@@ -71,7 +73,6 @@ Ajustes que só o dono do repositório faz em _Settings_:
 ## Próximos passos
 
 - [ ] Decidir os pontos em aberto de [docs/REGRAS.md](docs/REGRAS.md)
-- [ ] Animação dos dados
 - [ ] Jogadores controlados por IA
 - [ ] Salvar/carregar partida
 - [ ] Multijogador online
