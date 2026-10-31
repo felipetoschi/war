@@ -8,7 +8,8 @@ import {
   endAttackPhase,
   endTurn,
   fortify,
-  moveAfterConquest,
+  INITIAL_ARMIES,
+  maxAttackers,
   movableArmies,
   navalPenalty,
   placeArmies,
@@ -55,17 +56,17 @@ describe("createGame: sorteio dos estados", () => {
     expect(game.phase).toBe("order");
   });
 
-  it("divide o mais igualmente possível com 5 jogadores", () => {
-    const five = [1, 2, 3, 4, 5].map((n) => ({ id: `p${n}`, name: `P${n}`, color: "#000" }));
-    const game = createGame(map, five, seq(0.42, 0.13, 0.77));
-    const counts = five.map((p) => territoriesOf(game, p.id).length).sort();
-    expect(counts).toEqual([5, 5, 5, 6, 6]);
+  it("divide o mais igualmente possível com 4 jogadores", () => {
+    const four = [1, 2, 3, 4].map((n) => ({ id: `p${n}`, name: `P${n}`, color: "#000" }));
+    const game = createGame(map, four, seq(0.42, 0.13, 0.77));
+    const counts = four.map((p) => territoriesOf(game, p.id).length).sort();
+    expect(counts).toEqual([6, 7, 7, 7]);
   });
 
-  it("aceita de 2 a 5 jogadores", () => {
-    const many = [1, 2, 3, 4, 5, 6].map((n) => ({ id: `p${n}`, name: `P${n}`, color: "#000" }));
+  it("aceita de 2 a 4 jogadores", () => {
+    const many = [1, 2, 3, 4, 5].map((n) => ({ id: `p${n}`, name: `P${n}`, color: "#000" }));
     expect(() => createGame(map, many.slice(0, 1))).toThrow();
-    expect(() => createGame(map, many.slice(0, 5))).not.toThrow();
+    expect(() => createGame(map, many.slice(0, 4))).not.toThrow();
     expect(() => createGame(map, many)).toThrow();
   });
 });
@@ -74,7 +75,7 @@ describe("dados para a ordem de jogada e rodada inicial", () => {
   /** rng que faz rollDie tirar exatamente `face` (1–6) */
   const face = (n: number) => () => (n - 1) / 6;
 
-  it("quem tira mais começa; a rodada inicial começa por ele", () => {
+  it("quem tira mais começa e coloca 3 soldados primeiro", () => {
     let game = createGame(map, players);
     expect(playersToRollForOrder(game)).toEqual(["a", "b"]);
     game = rollForOrder(game, map, "a", face(2));
@@ -83,7 +84,7 @@ describe("dados para a ordem de jogada e rodada inicial", () => {
     expect(game.players.map((p) => p.id)).toEqual(["b", "a"]);
     expect(game.phase).toBe("placement");
     expect(game.currentPlayerIndex).toBe(0);
-    expect(game.pendingReinforcements).toBe(reinforcementsFor(game, map, "b"));
+    expect(game.pendingReinforcements).toBe(INITIAL_ARMIES);
   });
 
   it("empatados rolam de novo", () => {
@@ -97,30 +98,53 @@ describe("dados para a ordem de jogada e rodada inicial", () => {
     expect(game.players.map((p) => p.id)).toEqual(["a", "b"]);
   });
 
-  it("na rodada inicial todos posicionam e depois o primeiro começa o turno normal", () => {
+  it("cada um coloca 3 soldados, em um ou mais estados; depois começam os ataques", () => {
     let game = createGame(map, players);
     game = rollForOrder(game, map, "a", face(6));
     game = rollForOrder(game, map, "b", face(1));
-    const first = territoriesOf(game, "a")[0]!;
-    game = placeArmies(game, map, first, game.pendingReinforcements);
+    const [a1, a2] = territoriesOf(game, "a");
+    game = placeArmies(game, map, a1!, 2);
+    game = placeArmies(game, map, a2!, 1);
+    expect(game.territories[a1!]!.armies).toBe(3);
     expect(game.phase).toBe("placement");
     expect(game.currentPlayerIndex).toBe(1);
+    expect(game.pendingReinforcements).toBe(3);
 
-    const second = territoriesOf(game, "b")[0]!;
-    game = placeArmies(game, map, second, game.pendingReinforcements);
-    expect(game.phase).toBe("reinforce");
+    const b1 = territoriesOf(game, "b")[0]!;
+    game = placeArmies(game, map, b1, 3);
+    // rodada 1: sem reforço, direto para o ataque do primeiro jogador
     expect(game.round).toBe(1);
+    expect(game.phase).toBe("attack");
     expect(game.currentPlayerIndex).toBe(0);
+    expect(game.pendingReinforcements).toBe(0);
   });
 });
 
-describe("reinforcementsFor", () => {
-  it("dá no mínimo 3 soldados", () => {
-    expect(reinforcementsFor(stateWith({ ac: 1 }), map, "a")).toBe(3);
+describe("reforço: 1 soldado a cada 2 estados", () => {
+  it("conta 1 soldado a cada 2 estados", () => {
+    expect(reinforcementsFor(stateWith({ ac: 1 }), map, "a")).toBe(0);
+    expect(reinforcementsFor(stateWith({ ac: 1, am: 1, ro: 1 }), map, "a")).toBe(1);
+    expect(reinforcementsFor(stateWith({ ac: 1, am: 1, ro: 1, rr: 1 }), map, "a")).toBe(2);
   });
 
   it("soma o bônus da região", () => {
-    expect(reinforcementsFor(stateWith({ pr: 1, sc: 1, rs: 1 }), map, "a")).toBe(3 + 2);
+    expect(reinforcementsFor(stateWith({ pr: 1, sc: 1, rs: 1 }), map, "a")).toBe(1 + 2);
+  });
+
+  it("começa na rodada 2: o reforço vem antes do ataque", () => {
+    const owned = { ac: 1, am: 1, ro: 1, rr: 1 };
+    const roundOneEnd = { ...stateWith(owned), currentPlayerIndex: 1 };
+    const next = endTurn(roundOneEnd, map); // volta ao primeiro: rodada 2
+    expect(next.round).toBe(2);
+    expect(next.phase).toBe("reinforce");
+    expect(next.pendingReinforcements).toBe(2);
+  });
+
+  it("na rodada 1 não há reforço", () => {
+    const next = endTurn(stateWith({ ac: 1 }), map); // de "a" para "b", ainda rodada 1
+    expect(next.round).toBe(1);
+    expect(next.phase).toBe("attack");
+    expect(next.pendingReinforcements).toBe(0);
   });
 });
 
@@ -153,24 +177,30 @@ describe("ataque e conquista", () => {
     expect(canAttack(state, map, "go", "mg")).toBe(false);
   });
 
-  it("ao conquistar, o jogador escolhe mover de 1 até o número de dados usados", () => {
-    // SP com 5 soldados ataca com 3 dados (6, 6, 6) contra 1 (1)
-    const result = attack(stateWith({ sp: 5 }), map, "sp", "mg", seq(0.99, 0.99, 0.99, 0));
-    expect(result.conquered).toBe(true);
-    expect(result.state.pendingMove).toEqual({ from: "sp", to: "mg", max: 3 });
-    expect(canAttack(result.state, map, "sp", "rj")).toBe(false); // bloqueado até mover
-    expect(() => moveAfterConquest(result.state, 4)).toThrow();
-
-    const moved = moveAfterConquest(result.state, 2);
-    expect(moved.territories.mg).toEqual({ owner: "a", armies: 2 });
-    expect(moved.territories.sp!.armies).toBe(3);
-    expect(moved.pendingMove).toBeNull();
+  it("o jogador escolhe com quantos soldados ataca (até 3, deixando 1)", () => {
+    expect(maxAttackers(stateWith({ sp: 2 }), "sp")).toBe(1);
+    expect(maxAttackers(stateWith({ sp: 3 }), "sp")).toBe(2);
+    expect(maxAttackers(stateWith({ sp: 9 }), "sp")).toBe(3);
+    const state = stateWith({ sp: 9 });
+    expect(() => attack(state, map, "sp", "mg", Math.random, 4)).toThrow();
+    // ataca com 2: rola 2 dados
+    const result = attack(state, map, "sp", "mg", seq(0.99, 0.99, 0), 2);
+    expect(result.battle.attackRolls).toHaveLength(2);
   });
 
-  it("o máximo a mover nunca deixa a origem vazia", () => {
-    // SP com 2 soldados ataca com 1 dado
-    const result = attack(stateWith({ sp: 2 }), map, "sp", "mg", seq(0.99, 0));
-    expect(result.state.pendingMove!.max).toBe(1);
+  it("ao conquistar, os soldados que atacaram e sobreviveram ocupam o estado", () => {
+    // SP com 9 ataca com 2 (6, 6) contra 1 (1)
+    const result = attack(stateWith({ sp: 9 }), map, "sp", "mg", seq(0.99, 0.99, 0), 2);
+    expect(result.conquered).toBe(true);
+    expect(result.state.territories.mg).toEqual({ owner: "a", armies: 2 });
+    expect(result.state.territories.sp!.armies).toBe(7);
+  });
+
+  it("empate favorece a defesa", () => {
+    // 1 soldado ataca (4) contra 1 defensor (4)
+    const result = attack(stateWith({ sp: 2 }), map, "sp", "mg", seq(0.5, 0.5), 1);
+    expect(result.battle.attackerLosses).toBe(1);
+    expect(result.conquered).toBe(false);
   });
 
   it("informa o jogador eliminado e declara vencedor o último vivo", () => {
@@ -181,11 +211,10 @@ describe("ataque e conquista", () => {
     expect(result.eliminated).toBe("b");
     expect(result.state.winner).toBe("a");
     expect(result.state.phase).toBe("finished");
-    expect(result.state.pendingMove).toBeNull();
   });
 });
 
-describe("remanejamento e troca de turno", () => {
+describe("remanejamento", () => {
   it("move soldados entre vizinhos deixando ao menos 1", () => {
     const state = endAttackPhase(stateWith({ sp: 4, pr: 1 }));
     const next = fortify(state, map, "sp", "pr", 3);
@@ -198,17 +227,6 @@ describe("remanejamento e troca de turno", () => {
     state = fortify(state, map, "sp", "pr", 3);
     expect(movableArmies(state, "pr")).toBe(0);
     expect(() => fortify(state, map, "pr", "sc", 1)).toThrow();
-  });
-
-  it("passa a vez e calcula os reforços do próximo jogador", () => {
-    const next = endTurn(stateWith({ ac: 1 }), map);
-    expect(next.currentPlayerIndex).toBe(1);
-    expect(next.phase).toBe("reinforce");
-    expect(next.round).toBe(1); // só muda quando volta ao primeiro jogador
-    expect(endTurn({ ...next, phase: "attack" }, map).round).toBe(2);
-    expect(next.fortified).toEqual({});
-    // "b" tem 26 estados (13) + Nordeste, Centro-Oeste, Sudeste e Sul
-    expect(next.pendingReinforcements).toBe(13 + 5 + 3 + 3 + 2);
   });
 
   it("não deixa posicionar em estado inimigo", () => {

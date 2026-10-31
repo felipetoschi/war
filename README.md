@@ -1,17 +1,14 @@
 # Domínio · Brasil
 
-Jogo de estratégia por turnos, de conquista de territórios, que roda no navegador,
-jogado no **mapa do Brasil** — 26 estados + Distrito Federal, agrupados nas 5 regiões.
+Jogo de estratégia por turnos, de conquista de territórios, para jogar **no tablet, sobre a mesa**,
+no **mapa do Brasil** — 26 estados + Distrito Federal, agrupados nas 5 regiões.
 
-- De **2 a 5 jogadores** no mesmo aparelho.
-- Os 27 estados são **sorteados** entre os jogadores; depois, **dados virtuais** decidem quem começa.
-- Dados com pontinhos, estilo bozó, que chacoalham na tela antes do resultado.
-- Combate no estilo do War clássico: até 3 dados de ataque contra até 3 de defesa; empate favorece a defesa.
-- **Ataque naval ⚓:** estados do litoral atacam outros do litoral, mesmo sem fronteira,
-  com penalidade nos dados que aumenta com a distância (ex.: RN → RS tem −3 em cada dado).
-- **Objetivo:** ser o último jogador vivo.
-- Botão de **tela cheia**.
-- Interface pensada para **tablet** (deitado ou em pé). O layout para celular vem depois.
+- De **2 a 4 jogadores**, cada um num canto do tablet (os de cima veem o seu canto virado para eles).
+- Os 27 estados são **sorteados**; depois, **dados** decidem a ordem de jogo.
+- Rodada inicial com **3 soldados** para cada; ataque escolhendo origem, alvo e quantos soldados.
+- **Dados como se fossem físicos** (vermelho ataca, amarelo defende) e **soldadinhos** na borda de cada jogador.
+- **Ataque naval ⚓:** litoral ataca litoral, com penalidade nos dados pela distância.
+- Reforço: 1 soldado a cada 2 estados, a partir da rodada 2. **Vence o último vivo.**
 
 📖 As regras completas, e o que ainda está em aberto, estão em [docs/REGRAS.md](docs/REGRAS.md).
 
@@ -44,6 +41,7 @@ src/
     brasil-svg.ts  # contornos dos estados e posição dos marcadores
     dice.ts        # dados com pontinhos e animação de rolagem
     fullscreen.ts  # botão de tela cheia
+    pieces.ts      # soldadinhos (peças) na borda de cada jogador
   main.ts          # interface (mapa em SVG)
   style.css
 ```

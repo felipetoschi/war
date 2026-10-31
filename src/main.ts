@@ -3,7 +3,6 @@ import { BRASIL_MAP } from "./game/brasil";
 import type { BattleResult } from "./game/dice";
 import { getTerritory } from "./game/map";
 import {
-  alivePlayers,
   attack,
   attackPenalty,
   canAttack,
@@ -12,16 +11,17 @@ import {
   endAttackPhase,
   endTurn,
   fortify,
+  INITIAL_ARMIES,
   MAX_PLAYERS,
+  maxAttackers,
   MIN_PLAYERS,
   movableArmies,
-  moveAfterConquest,
   placeArmies,
   playersToRollForOrder,
   rollForOrder,
   territoriesOf,
 } from "./game/rules";
-import type { GameState, Player, TerritoryId } from "./game/types";
+import type { GameState, Player, PlayerId, TerritoryId } from "./game/types";
 import { LABELS, STATE_PATHS, VIEW_BOX } from "./ui/brasil-svg";
 import { animateDice, dieHtml, ROLL_MS } from "./ui/dice";
 import {
@@ -30,30 +30,48 @@ import {
   onFullscreenChange,
   toggleFullscreen,
 } from "./ui/fullscreen";
+import { pawnSvg, reserveHtml } from "./ui/pieces";
 
 const map = BRASIL_MAP;
-const COLORS = ["#d63c31", "#2f6fd6", "#1f9a52", "#e3b021", "#8e44ad"];
-const CREDITS = `<p class="credits">Mapa: <a href="https://github.com/VictorCazanave/svg-maps" target="_blank" rel="noopener">svg-maps</a> (CC BY 4.0)</p>`;
+const COLORS = ["#d63c31", "#2f6fd6", "#1f9a52", "#8e44ad"];
+const CREDITS = `Mapa: <a href="https://github.com/VictorCazanave/svg-maps" target="_blank" rel="noopener">svg-maps</a> (CC BY 4.0)`;
+
+/**
+ * Lugares à mesa: cada jogador fica num canto do tablet.
+ * Com 2 jogadores, eles ficam frente a frente (cantos opostos).
+ * Os de cima veem o painel virado para eles (rotação de 180°).
+ */
+type Seat = "bl" | "tr" | "br" | "tl";
+const SEATS: Seat[] = ["bl", "tr", "br", "tl"];
 
 interface LastBattle {
   from: TerritoryId;
   to: TerritoryId;
+  attacker: PlayerId;
+  defender: PlayerId;
   battle: BattleResult;
   naval: boolean;
+  conquered: boolean;
 }
 
 // ---- estado da interface ----
 let screen: "players" | "game" = "players";
-let playerCount = 3;
+let playerCount = 2;
 const names: string[] = Array.from({ length: MAX_PLAYERS }, () => "");
+let seats: Record<PlayerId, Seat> = {};
 let state: GameState | null = null;
-/** Enquanto os dados rolam, o mapa e o painel mostram o estado de antes da rolagem. */
+/** Enquanto os dados rolam, o tabuleiro mostra o estado de antes da rolagem. */
 let frozen: GameState | null = null;
 let rolling = false;
 let selected: TerritoryId | null = null;
-let placeAmount: number | "all" = 1;
+let target: TerritoryId | null = null;
 let lastBattle: LastBattle | null = null;
+let menuOpen = false;
 const log: string[] = [];
+/** Mensagens geradas durante uma rolagem esperam os dados pararem para aparecer. */
+let deferredLog: string[] | null = null;
+/** Muda a cada nova partida, para descartar rolagens da partida anterior. */
+let gameId = 0;
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 
@@ -66,13 +84,7 @@ const escapeHtml = (text: string) =>
 const sigla = (id: TerritoryId) => id.toUpperCase();
 const stateName = (id: TerritoryId) => getTerritory(map, id).name;
 const playerById = (game: GameState, id: string) => game.players.find((p) => p.id === id)!;
-const swatch = (p: Player) => `<span class="swatch" style="background:${p.color}"></span>`;
-const playerTag = (p: Player) => `${swatch(p)}<b>${escapeHtml(p.name)}</b>`;
-
-/** Mensagens geradas durante uma rolagem esperam os dados pararem para aparecer. */
-let deferredLog: string[] | null = null;
-/** Muda a cada nova partida, para descartar rolagens da partida anterior. */
-let gameId = 0;
+const nameOf = (p: Player) => escapeHtml(p.name);
 
 function addLog(message: string) {
   if (deferredLog) {
@@ -80,7 +92,7 @@ function addLog(message: string) {
     return;
   }
   log.unshift(message);
-  if (log.length > 60) log.pop();
+  if (log.length > 80) log.pop();
 }
 
 /** Aplica uma jogada com dados: anima a rolagem e só depois mostra o resultado. */
@@ -110,7 +122,9 @@ function resetToSetup() {
   screen = "players";
   state = null;
   selected = null;
+  target = null;
   lastBattle = null;
+  menuOpen = false;
   log.length = 0;
 }
 
@@ -126,26 +140,29 @@ function renderPlayersScreen(): string {
     { length: playerCount },
     (_, i) => `
       <label class="name-input">
-        <span class="swatch" style="background:${COLORS[i]}"></span>
-        <input data-name="${i}" maxlength="16" placeholder="Jogador ${i + 1}" value="${escapeHtml(names[i]!)}" />
+        ${pawnSvg(COLORS[i]!)}
+        <input data-name="${i}" maxlength="14" placeholder="Jogador ${i + 1}" value="${escapeHtml(names[i]!)}" />
       </label>`,
   ).join("");
 
   return `
-    <div class="center">
+    <div class="setup-screen">
       <section class="card setup">
+        <h1>Domínio · Brasil</h1>
         <h2>1. Quantos jogadores?</h2>
         <div class="chips">${options}</div>
         <h2>2. Nome dos jogadores</h2>
         <div class="names">${inputs}</div>
-        <p class="muted">Os 27 estados serão sorteados entre os jogadores. Depois, os dados decidem quem começa.</p>
+        <p class="muted">Cada jogador fica num canto do tablet. Os 27 estados serão sorteados e,
+          depois, os dados decidem quem começa.</p>
         <button id="deal" class="primary">Sortear os estados 🎲</button>
+        <p class="credits">${CREDITS}</p>
       </section>
-    </div>
-    ${CREDITS}`;
+      ${toolbar()}
+    </div>`;
 }
 
-// ---- jogo: ações ----
+// ---- ações no mapa ----
 function onTerritoryClick(id: TerritoryId) {
   if (!state || rolling) return;
   const owner = state.territories[id]?.owner;
@@ -153,23 +170,17 @@ function onTerritoryClick(id: TerritoryId) {
   try {
     switch (state.phase) {
       case "placement":
-      case "reinforce": {
-        const amount =
-          placeAmount === "all"
-            ? state.pendingReinforcements
-            : Math.min(placeAmount, state.pendingReinforcements);
-        state = placeArmies(state, map, id, amount);
+      case "reinforce":
+        state = placeArmies(state, map, id, 1);
         break;
-      }
       case "attack":
-        if (state.pendingMove) break;
         if (owner === me) {
+          target = null;
           if (selected === id) selected = null;
           else if (state.territories[id]!.armies > 1) selected = id;
           else addLog("⚠ Para atacar, o estado precisa de pelo menos 2 soldados");
         } else if (selected && canAttack(state, map, selected, id)) {
-          doAttack(selected, id);
-          return;
+          target = target === id ? null : id;
         }
         break;
       case "fortify":
@@ -190,23 +201,37 @@ function onTerritoryClick(id: TerritoryId) {
   render();
 }
 
-function doAttack(from: TerritoryId, to: TerritoryId) {
-  const game = state!;
+function doAttack(soldiers: number) {
+  if (!state || !selected || !target) return;
+  const game = state;
+  const from = selected;
+  const to = target;
   const attacker = currentPlayer(game);
   const defender = playerById(game, game.territories[to]!.owner);
   withDiceRoll(() => {
-    const result = attack(game, map, from, to);
+    const result = attack(game, map, from, to, Math.random, soldiers);
     state = result.state;
-    lastBattle = { from, to, battle: result.battle, naval: result.naval };
+    lastBattle = {
+      from,
+      to,
+      attacker: attacker.id,
+      defender: defender.id,
+      battle: result.battle,
+      naval: result.naval,
+      conquered: result.conquered,
+    };
     const { attackerLosses, defenderLosses } = result.battle;
     addLog(
-      `${sigla(from)} ${result.naval ? "⚓" : "⚔"} ${sigla(to)}: ataque perdeu ${attackerLosses}, defesa perdeu ${defenderLosses}` +
-        (result.conquered ? ` — ${stateName(to)} conquistado!` : ""),
+      `${nameOf(attacker)}: ${sigla(from)} ${result.naval ? "⚓" : "⚔"} ${sigla(to)} com ${soldiers} — ataque perdeu ${attackerLosses}, defesa perdeu ${defenderLosses}` +
+        (result.conquered ? ` · ${stateName(to)} conquistado!` : ""),
     );
     if (result.eliminated) {
-      addLog(`☠ ${escapeHtml(defender.name)} foi eliminado por ${escapeHtml(attacker.name)}!`);
+      addLog(`☠ ${nameOf(defender)} foi eliminado por ${nameOf(attacker)}!`);
     }
-    if (result.conquered || state.territories[from]!.armies < 2) selected = null;
+    // Mantém a seleção para atacar de novo, se ainda der.
+    const canContinue = state.territories[from]!.armies > 1;
+    if (result.conquered || !canContinue) target = null;
+    if (!canContinue) selected = null;
   });
 }
 
@@ -214,15 +239,15 @@ function rollOrder(players: string[]) {
   withDiceRoll(() => {
     for (const id of players) state = rollForOrder(state!, map, id);
     if (state!.phase !== "order") {
-      addLog(`Ordem de jogada: ${state!.players.map((p) => escapeHtml(p.name)).join(" → ")}`);
+      addLog(`Ordem de jogada: ${state!.players.map(nameOf).join(" → ")}`);
     }
   });
 }
 
-// ---- jogo: mapa ----
+// ---- mapa ----
 function renderBoard(game: GameState): string {
   const targets = new Map<TerritoryId, number>();
-  if (selected && game.phase === "attack") {
+  if (selected && !target && game.phase === "attack") {
     for (const t of map.territories) {
       if (canAttack(game, map, selected, t.id)) {
         targets.set(t.id, attackPenalty(map, selected, t.id)!);
@@ -236,15 +261,18 @@ function renderBoard(game: GameState): string {
     }
   }
   const battle = rolling && lastBattle ? lastBattle : null;
+  const placing = game.phase === "placement" || game.phase === "reinforce";
+  const me = currentPlayer(game).id;
 
   const states = map.territories
     .map((t) => {
       const ts = game.territories[t.id]!;
       const classes = ["state"];
       if (selected === t.id || battle?.from === t.id) classes.push("selected");
-      if (battle?.to === t.id) classes.push("defending");
+      if (target === t.id || battle?.to === t.id) classes.push("defending");
       if (targets.has(t.id)) classes.push(targets.get(t.id)! > 0 ? "target-naval" : "target");
       if (fortifyTargets.has(t.id)) classes.push("target");
+      if (placing && ts.owner !== me) classes.push("dim");
       return `<path class="${classes.join(" ")}" data-id="${t.id}" d="${STATE_PATHS[t.id]}" fill="${playerById(game, ts.owner).color}"><title>${t.name}</title></path>`;
     })
     .join("");
@@ -275,226 +303,247 @@ function renderBoard(game: GameState): string {
   return `<svg class="board" viewBox="${VIEW_BOX}" role="img" aria-label="Mapa do Brasil">${states}${labels}</svg>`;
 }
 
-// ---- jogo: lateral esquerda (vez, ações e dados) ----
-function renderOrderTray(game: GameState): string {
-  const pending = playersToRollForOrder(game);
-  const rows = game.players
-    .map((p) => {
-      const rolls = state!.orderRolls[p.id] ?? [];
-      const latest = frozen?.orderRolls[p.id]?.length ?? 0;
-      const dice = rolls
-        .map((v, i) =>
-          dieHtml(v, "neutral", {
-            size: "md",
-            rolling: rolling && i >= latest,
-            title: i > 0 ? "desempate" : "",
-          }),
-        )
-        .join("");
-      const button =
-        !rolling && pending.includes(p.id)
-          ? `<button class="roll" data-roll="${p.id}">🎲 Rolar</button>`
-          : "";
-      return `<li><span class="who">${playerTag(p)}</span><span class="dice">${dice}</span>${button}</li>`;
-    })
-    .join("");
-  const tie = !rolling && pending.some((id) => (game.orderRolls[id]?.length ?? 0) > 0);
-  return `
-    <h2>Quem começa?</h2>
-    <p>Os estados já foram sorteados. Agora cada jogador rola um dado: <b>quem tirar mais começa</b>.</p>
-    ${tie ? `<p class="warn">Empate! Os empatados rolam de novo.</p>` : ""}
-    <ul class="order">${rows}</ul>
-    ${rolling ? `<p class="muted">Rolando…</p>` : `<button id="roll-all" class="primary">🎲 Rolar para todos</button>`}`;
+// ---- cantos dos jogadores ----
+function reserveFor(game: GameState, player: Player): number {
+  const index = game.players.indexOf(player);
+  if (game.phase === "order") return INITIAL_ARMIES;
+  if (game.phase === "placement") {
+    if (index < game.currentPlayerIndex) return 0;
+    return index === game.currentPlayerIndex ? game.pendingReinforcements : INITIAL_ARMIES;
+  }
+  if (game.phase === "reinforce" && index === game.currentPlayerIndex) {
+    return game.pendingReinforcements;
+  }
+  return 0;
 }
 
-function renderBattleTray(): string {
-  if (!lastBattle) {
-    return `<div class="tray empty"><p class="muted">Os dados do ataque e da defesa aparecem aqui.</p></div>`;
+function seatDice(game: GameState, player: Player): string {
+  // Na decisão da ordem (e na rodada inicial, para lembrar), cada um vê o próprio dado.
+  if (game.phase === "order" || game.phase === "placement") {
+    const rolls = state!.orderRolls[player.id] ?? [];
+    const before = frozen?.orderRolls[player.id]?.length ?? rolls.length;
+    return rolls
+      .map((v, i) =>
+        dieHtml(v, "neutral", {
+          rolling: rolling && game.phase === "order" && i >= before,
+          title: i ? "desempate" : "",
+        }),
+      )
+      .join("");
   }
-  const { from, to, battle, naval } = lastBattle;
+  if (!lastBattle) return "";
+  const { battle, attacker, defender } = lastBattle;
   const pairs = Math.min(battle.attackRolls.length, battle.defenseRolls.length);
   const attackWon = (i: number) => battle.effectiveAttackRolls[i]! > battle.defenseRolls[i]!;
-  const attackDice = battle.attackRolls
-    .map((v, i) => {
-      const eff = battle.effectiveAttackRolls[i]!;
-      const die = dieHtml(eff, "attack", {
-        rolling,
-        lost: i < pairs && !attackWon(i),
-        title: eff !== v ? `tirou ${v}, −${battle.attackPenalty} por mar` : "",
-      });
-      const note = eff !== v && !rolling ? `<small>${v}−${battle.attackPenalty}</small>` : "";
-      return `<span class="die-slot">${die}${note}</span>`;
-    })
-    .join("");
-  const defenseDice = battle.defenseRolls
-    .map(
-      (v, i) =>
-        `<span class="die-slot">${dieHtml(v, "defense", { rolling, lost: i < pairs && attackWon(i) })}</span>`,
-    )
-    .join("");
-  const summary = rolling
-    ? "Rolando…"
-    : `Ataque perdeu ${battle.attackerLosses} · Defesa perdeu ${battle.defenderLosses}`;
-  return `
-    <div class="tray">
-      <div class="tray-title">${stateName(from)} ${naval ? "⚓" : "⚔"} ${stateName(to)}
-        ${naval ? `<span class="muted">(−${battle.attackPenalty} em cada dado do ataque)</span>` : ""}</div>
-      <div class="tray-row"><span class="tray-label">Ataque</span>${attackDice}</div>
-      <div class="tray-row"><span class="tray-label">Defesa</span>${defenseDice}</div>
-      <div class="tray-summary">${summary}</div>
-    </div>`;
+  if (player.id === attacker) {
+    return battle.attackRolls
+      .map((v, i) => {
+        const eff = battle.effectiveAttackRolls[i]!;
+        const die = dieHtml(eff, "attack", { rolling, lost: i < pairs && !attackWon(i) });
+        const note = eff !== v && !rolling ? `<small>${v}−${battle.attackPenalty}</small>` : "";
+        return `<span class="die-slot">${die}${note}</span>`;
+      })
+      .join("");
+  }
+  if (player.id === defender) {
+    return battle.defenseRolls
+      .map(
+        (v, i) =>
+          `<span class="die-slot">${dieHtml(v, "defense", { rolling, lost: i < pairs && attackWon(i) })}</span>`,
+      )
+      .join("");
+  }
+  return "";
 }
 
-function renderPhase(game: GameState): string {
-  const who = playerTag(currentPlayer(game));
-  const amountChips = () => {
-    const options: (number | "all")[] = [1, 3, "all"];
-    return `<div class="chips small">Por toque:
-      ${options
-        .map(
-          (o) =>
-            `<button class="chip ${o === placeAmount ? "active" : ""}" data-amount="${o}">${o === "all" ? "Todos" : o}</button>`,
-        )
-        .join("")}</div>`;
-  };
+function seatBattleNote(player: Player): string {
+  if (!lastBattle || rolling) return "";
+  const { battle, attacker, defender, conquered, to } = lastBattle;
+  if (player.id === attacker) {
+    return `<p class="note">Ataque perdeu ${battle.attackerLosses}${conquered ? ` · conquistou ${stateName(to)}!` : ""}</p>`;
+  }
+  if (player.id === defender) {
+    return `<p class="note">Defesa perdeu ${battle.defenderLosses}${conquered ? ` · perdeu ${stateName(to)}` : ""}</p>`;
+  }
+  return "";
+}
+
+function seatActions(game: GameState, player: Player): string {
+  if (game.phase === "order") {
+    const pending = playersToRollForOrder(game);
+    if (rolling) return "";
+    if (pending.includes(player.id)) {
+      const tie = (game.orderRolls[player.id]?.length ?? 0) > 0;
+      return `${tie ? `<p class="note warn">Empate! Role de novo.</p>` : `<p class="note">Role o dado: quem tirar mais começa.</p>`}
+        <button class="primary" data-roll="${player.id}">🎲 Rolar dado</button>`;
+    }
+    return `<p class="note">Aguardando os outros jogadores…</p>`;
+  }
+  if (game.phase === "finished") {
+    return game.winner === player.id
+      ? `<p class="note big">🏆 Você venceu!</p><button id="new-game" class="primary">Nova partida</button>`
+      : "";
+  }
+  if (currentPlayer(game).id !== player.id || rolling) return "";
 
   switch (game.phase) {
-    case "order":
-      return renderOrderTray(game);
     case "placement":
-      return `
-        <h2>Rodada inicial</h2>
-        <p>${who}, posicione <b>${game.pendingReinforcements}</b> soldado(s) nos seus estados.</p>
-        <p class="muted">Metade dos seus estados (mínimo 3) + bônus de região. Nesta rodada ninguém ataca.</p>
-        ${amountChips()}`;
+      return `<p class="note"><b>Rodada inicial:</b> coloque seus ${INITIAL_ARMIES} soldados tocando nos seus estados (pode dividir entre vários).</p>`;
     case "reinforce":
-      return `
-        <h2>Rodada ${game.round} · Reforço</h2>
-        <p>${who}, posicione <b>${game.pendingReinforcements}</b> soldado(s) nos seus estados.</p>
-        ${amountChips()}`;
+      return `<p class="note"><b>Reforço:</b> coloque ${game.pendingReinforcements} soldado(s) nos seus estados.</p>`;
     case "attack": {
-      if (game.pendingMove) {
-        const { to, max } = game.pendingMove;
+      let step: string;
+      if (!selected) {
+        step = `<p class="note"><b>Ataque:</b> toque no estado de onde vai partir o ataque.</p>`;
+      } else if (!target) {
+        step = `<p class="note">De <b>${stateName(selected)}</b>: agora toque no estado que vai receber o ataque.</p>`;
+      } else {
+        const max = maxAttackers(game, selected);
         const buttons = Array.from(
           { length: max },
-          (_, i) => `<button class="chip" data-move="${i + 1}">${i + 1}</button>`,
+          (_, i) =>
+            `<button class="chip attack-count" data-attack="${i + 1}">${i + 1}<span>${pawnSvg(player.color).repeat(i + 1)}</span></button>`,
         ).join("");
-        return `
-          <h2>Conquista!</h2>
-          <p>${who}, quantos soldados mover para <b>${stateName(to)}</b>?</p>
+        const penalty = attackPenalty(map, selected, target)!;
+        step = `<p class="note"><b>${stateName(selected)}</b> → <b>${stateName(target)}</b>${penalty ? ` ⚓ −${penalty} nos dados` : ""}<br/>Atacar com quantos soldados?</p>
           <div class="chips">${buttons}</div>`;
       }
-      const info = selected
-        ? `<p>Atacando de <b>${stateName(selected)}</b> (${game.territories[selected]!.armies} soldados). Toque num inimigo destacado.</p>`
-        : `<p class="muted">Toque num estado seu com 2+ soldados e depois no inimigo. Por terra: vizinhos. Por mar ⚓: litoral com litoral, com penalidade.</p>`;
-      return `
-        <h2>Rodada ${game.round} · Ataque</h2>
-        <p>Vez de ${who}.</p>
-        ${info}
-        <button id="end-attack" class="primary" ${rolling ? "disabled" : ""}>Encerrar ataques</button>`;
+      return `${step}<button id="end-attack">Encerrar ataques</button>`;
     }
-    case "fortify": {
-      const info = selected
-        ? `<p>Remanejando de <b>${stateName(selected)}</b> (${movableArmies(game, selected)} disponível). Toque num vizinho seu.</p>`
-        : `<p class="muted">Toque num estado seu e depois num vizinho seu para mover 1 soldado. Soldado remanejado não se move de novo neste turno.</p>`;
-      return `
-        <h2>Rodada ${game.round} · Remanejamento</h2>
-        <p>Vez de ${who}.</p>
-        ${info}
+    case "fortify":
+      return `<p class="note"><b>Remanejar</b> (opcional): toque num estado seu e depois num vizinho seu para mover 1 soldado.</p>
         <button id="end-turn" class="primary">Passar a vez</button>`;
-    }
-    case "finished":
-      return `
-        <h2>🏆 Fim de jogo</h2>
-        <p>${playerTag(playerById(game, game.winner!))} é o último jogador vivo e venceu!</p>
-        <button id="new-game" class="primary">Nova partida</button>`;
+    default:
+      return "";
   }
 }
 
-function renderLeft(game: GameState): string {
-  const showBattle = game.phase === "attack" || (game.phase === "finished" && lastBattle);
+function renderSeat(game: GameState, seat: Seat): string {
+  const player = game.players.find((p) => seats[p.id] === seat);
+  if (!player) return `<section class="seat seat-${seat} empty"></section>`;
+  const owned = territoriesOf(game, player.id);
+  const armies = owned.reduce((sum, id) => sum + game.territories[id]!.armies, 0);
+  const isTurn =
+    game.phase !== "order" && game.phase !== "finished" && currentPlayer(game).id === player.id;
+  const out = owned.length === 0;
+  const place =
+    game.phase !== "order" ? `<span class="place">${game.players.indexOf(player) + 1}º</span>` : "";
+  const classes = ["seat", `seat-${seat}`];
+  if (isTurn || (game.phase === "finished" && game.winner === player.id)) classes.push("current");
+  if (out) classes.push("out");
+
   return `
-    <aside class="side side-left">
-      <section class="box phase">${renderPhase(game)}</section>
-      ${showBattle ? `<section class="box">${renderBattleTray()}</section>` : ""}
-    </aside>`;
+    <section class="${classes.join(" ")}" style="--pc:${player.color}">
+      <div class="seat-head">
+        ${place}<span class="swatch"></span><b class="seat-name">${nameOf(player)}</b>
+        <span class="muted">${out ? "eliminado" : `${owned.length} estados · ${armies} soldados`}</span>
+      </div>
+      <div class="seat-body">
+        <div class="seat-dice">${seatDice(game, player)}</div>
+        ${seatBattleNote(player)}
+        <div class="seat-actions">${seatActions(game, player)}</div>
+      </div>
+      <div class="reserve">${reserveHtml(reserveFor(game, player), player.color)}</div>
+    </section>`;
 }
 
-// ---- jogo: lateral direita (jogadores, regiões, histórico) ----
-function renderRight(game: GameState): string {
-  const alive = new Set(alivePlayers(game).map((p) => p.id));
-  const ordered = game.phase !== "order";
-  const current = currentPlayer(game).id;
-  const players = game.players
-    .map((p, i) => {
-      const owned = territoriesOf(game, p.id);
-      const armies = owned.reduce((sum, id) => sum + game.territories[id]!.armies, 0);
-      const classes = [
-        ordered && p.id === current && game.phase !== "finished" ? "current" : "",
-        !alive.has(p.id) ? "out" : "",
-      ].join(" ");
-      return `<li class="${classes}">${ordered ? `<span class="place">${i + 1}º</span>` : ""}${playerTag(p)}
-        <span class="muted">${owned.length} estados · ${armies} soldados</span></li>`;
-    })
-    .join("");
+// ---- centro: status, barra de ferramentas e menu ----
+function statusText(game: GameState): string {
+  const who = nameOf(currentPlayer(game));
+  switch (game.phase) {
+    case "order":
+      return "Quem começa? Cada jogador rola o dado no seu canto";
+    case "placement":
+      return `Rodada inicial · ${who} coloca ${INITIAL_ARMIES} soldados`;
+    case "reinforce":
+      return `Rodada ${game.round} · ${who} · Reforço`;
+    case "attack":
+      return `Rodada ${game.round} · ${who} · Ataque`;
+    case "fortify":
+      return `Rodada ${game.round} · ${who} · Remanejamento`;
+    case "finished":
+      return `🏆 ${nameOf(playerById(game, game.winner!))} venceu!`;
+  }
+}
+
+function toolbar(): string {
+  const fs = fullscreenSupported()
+    ? `<button id="fullscreen" class="tool" title="Tela cheia">${isFullscreen() ? "🗗" : "⛶"}</button>`
+    : "";
+  const menu = screen === "game" ? `<button id="menu" class="tool" title="Menu">☰</button>` : "";
+  return `<div class="toolbar">${fs}${menu}</div>`;
+}
+
+function renderMenu(): string {
+  if (!menuOpen) return "";
   const regions = map.regions
     .map((r) => `<li><span>${r.name}</span><b>+${r.bonus}</b></li>`)
     .join("");
-
   return `
-    <aside class="side side-right">
-      <section class="box">
-        <h3>Jogadores ${ordered ? `<span class="muted">(ordem de jogada)</span>` : ""}</h3>
-        <ul class="players">${players}</ul>
-        <p class="muted">🎯 Objetivo: ser o último jogador vivo.</p>
-      </section>
-      <section class="box">
+    <div class="overlay" id="overlay">
+      <section class="card menu">
+        <h2>Regras rápidas</h2>
+        <ol class="rules">
+          <li>Os estados são sorteados; os dados decidem a ordem.</li>
+          <li>Rodada inicial: cada um coloca ${INITIAL_ARMIES} soldados.</li>
+          <li>Ataque: escolha a origem, o alvo e com quantos soldados (até 3). O maior dado vence; empate é da defesa.</li>
+          <li>Por mar ⚓: litoral ataca litoral, com penalidade nos dados.</li>
+          <li>A partir da rodada 2: 1 soldado a cada 2 estados + bônus de região.</li>
+          <li>Vence o último jogador vivo.</li>
+        </ol>
         <h3>Bônus por região</h3>
         <ul class="regions">${regions}</ul>
         <h3>Histórico</h3>
-        <ul class="log">${log.map((l) => `<li>${l}</li>`).join("")}</ul>
-        <button id="quit" class="link">Nova partida</button>
-        ${CREDITS}
+        <ul class="log">${log.map((l) => `<li>${l}</li>`).join("") || "<li>—</li>"}</ul>
+        <div class="menu-actions">
+          <button id="quit">Nova partida</button>
+          <button id="close-menu" class="primary">Voltar ao jogo</button>
+        </div>
+        <p class="credits">${CREDITS}</p>
       </section>
-    </aside>`;
+    </div>`;
 }
 
 // ---- render principal ----
-function renderHeader(): string {
-  const fsButton = fullscreenSupported()
-    ? `<button id="fullscreen" class="icon">${isFullscreen() ? "🗗 Sair da tela cheia" : "⛶ Tela cheia"}</button>`
-    : "";
-  return `<header class="topbar"><h1>Domínio · Brasil</h1>${fsButton}</header>`;
-}
-
 function render() {
-  let body: string;
   if (screen === "players" || !state) {
-    body = renderPlayersScreen();
+    app.className = "";
+    app.innerHTML = renderPlayersScreen();
   } else {
-    // Enquanto os dados rolam, mapa e painéis mostram o estado anterior (suspense!).
     const view = frozen ?? state;
-    body = `
-      <div class="layout">
-        ${renderLeft(view)}
-        <main class="board-wrap">${renderBoard(view)}</main>
-        ${renderRight(view)}
-      </div>`;
+    app.className = "table";
+    app.innerHTML = `
+      ${SEATS.map((s) => renderSeat(view, s)).join("")}
+      <main class="board-wrap">
+        ${renderBoard(view)}
+        <div class="status">${statusText(view)}</div>
+        ${toolbar()}
+      </main>
+      ${renderMenu()}`;
   }
-  app.className = screen === "game" ? "in-game" : "";
-  app.innerHTML = renderHeader() + body;
   bindEvents();
   animateDice(app);
 }
 
 function on(selector: string, handler: (el: HTMLElement) => void) {
-  app
-    .querySelectorAll<HTMLElement>(selector)
-    .forEach((el) => el.addEventListener("click", () => handler(el)));
+  app.querySelectorAll<HTMLElement>(selector).forEach((el) =>
+    el.addEventListener("click", (event) => {
+      event.stopPropagation();
+      handler(el);
+    }),
+  );
 }
 
 function bindEvents() {
   on("#fullscreen", () => void toggleFullscreen());
+  on("#menu", () => {
+    menuOpen = true;
+    render();
+  });
+  on("#close-menu", () => {
+    menuOpen = false;
+    render();
+  });
 
   // tela de jogadores
   on("[data-count]", (el) => {
@@ -512,33 +561,26 @@ function bindEvents() {
       name: names[i]!.trim() || `Jogador ${i + 1}`,
       color: COLORS[i]!,
     }));
+    seats = Object.fromEntries(players.map((p, i) => [p.id, SEATS[i]!]));
     state = createGame(map, players);
     screen = "game";
     addLog("Os 27 estados foram sorteados entre os jogadores.");
     render();
   });
 
-  // ordem de jogada
-  on("[data-roll]", (el) => rollOrder([el.dataset.roll!]));
-  on("#roll-all", () => rollOrder(playersToRollForOrder(state!)));
-
   // jogo
+  on("[data-roll]", (el) => rollOrder([el.dataset.roll!]));
   on("[data-id]", (el) => onTerritoryClick(el.dataset.id!));
-  on("[data-amount]", (el) => {
-    placeAmount = el.dataset.amount === "all" ? "all" : Number(el.dataset.amount);
-    render();
-  });
-  on("[data-move]", (el) => {
-    state = moveAfterConquest(state!, Number(el.dataset.move));
-    render();
-  });
+  on("[data-attack]", (el) => doAttack(Number(el.dataset.attack)));
   on("#end-attack", () => {
     selected = null;
+    target = null;
     state = endAttackPhase(state!);
     render();
   });
   on("#end-turn", () => {
     selected = null;
+    target = null;
     lastBattle = null;
     state = endTurn(state!, map);
     render();

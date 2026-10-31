@@ -4,10 +4,13 @@ import { resolveOrder } from "./order";
 import type { GameMap, GameState, Player, PlayerId, Rng, TerritoryId } from "./types";
 
 export const MIN_PLAYERS = 2;
-export const MAX_PLAYERS = 5;
+export const MAX_PLAYERS = 4;
 export const MAX_ATTACK_DICE = 3;
 export const MAX_DEFENSE_DICE = 3;
-export const MIN_REINFORCEMENTS = 3;
+/** Soldados que cada jogador posiciona na rodada inicial, antes dos ataques. */
+export const INITIAL_ARMIES = 3;
+/** A cada quantos estados o jogador ganha 1 soldado no reforço. */
+export const TERRITORIES_PER_REINFORCEMENT = 2;
 
 /**
  * Penalidade do ataque naval, por distância no litoral (em estados costeiros):
@@ -50,7 +53,6 @@ export function createGame(map: GameMap, players: Player[], rng: Rng = Math.rand
     phase: "order",
     round: 0,
     pendingReinforcements: 0,
-    pendingMove: null,
     fortified: {},
     winner: null,
   };
@@ -67,11 +69,11 @@ export function playersToRollForOrder(state: GameState): PlayerId[] {
 
 /**
  * Um jogador rola o dado para decidir a ordem de jogada. Quando a ordem fica definida,
- * os jogadores são reordenados e começa a rodada inicial pelo primeiro.
+ * os jogadores são reordenados e começa a rodada inicial (3 soldados para cada).
  */
 export function rollForOrder(
   state: GameState,
-  map: GameMap,
+  _map: GameMap,
   player: PlayerId,
   rng: Rng = Math.random,
 ): GameState {
@@ -89,7 +91,7 @@ export function rollForOrder(
     next.players = order.map((id) => next.players.find((p) => p.id === id)!);
     next.phase = "placement";
     next.currentPlayerIndex = 0;
-    next.pendingReinforcements = reinforcementsFor(next, map, next.players[0]!.id);
+    next.pendingReinforcements = INITIAL_ARMIES;
   }
   return next;
 }
@@ -117,9 +119,9 @@ export function controlsRegion(
     .every((t) => state.territories[t.id]?.owner === player);
 }
 
-/** Regra clássica: metade dos estados (mínimo 3) + bônus de cada região dominada. */
+/** Reforço: 1 soldado a cada 2 estados + bônus de cada região dominada. */
 export function reinforcementsFor(state: GameState, map: GameMap, player: PlayerId): number {
-  const base = Math.max(MIN_REINFORCEMENTS, Math.floor(territoriesOf(state, player).length / 2));
+  const base = Math.floor(territoriesOf(state, player).length / TERRITORIES_PER_REINFORCEMENT);
   const bonus = map.regions
     .filter((r) => controlsRegion(state, map, player, r.id))
     .reduce((sum, r) => sum + r.bonus, 0);
@@ -128,24 +130,26 @@ export function reinforcementsFor(state: GameState, map: GameMap, player: Player
 
 function assertPhase(state: GameState, ...phases: GameState["phase"][]): void {
   if (!phases.includes(state.phase)) throw new Error(`Ação inválida na fase "${state.phase}"`);
-  if (state.pendingMove)
-    throw new Error("Escolha quantos soldados mover para o estado conquistado");
 }
 
 function assertOwnedByCurrent(state: GameState, id: TerritoryId): void {
   const territory = state.territories[id];
-  if (!territory) throw new Error(`Estado sem dono: ${id}`);
+  if (!territory) throw new Error(`Estado desconhecido: ${id}`);
   if (territory.owner !== currentPlayer(state).id) {
     throw new Error("Esse estado não é do jogador da vez");
   }
 }
 
-/** Começa o turno normal de um jogador, na fase de reforço. */
+/**
+ * Começa o turno de um jogador. Na rodada 1 não há reforço (vai direto ao ataque);
+ * a partir da rodada 2, começa pelo reforço.
+ */
 function startTurn(state: GameState, map: GameMap, index: number): GameState {
   state.currentPlayerIndex = index;
-  state.phase = "reinforce";
   state.fortified = {};
-  state.pendingReinforcements = reinforcementsFor(state, map, state.players[index]!.id);
+  state.pendingReinforcements =
+    state.round >= 2 ? reinforcementsFor(state, map, state.players[index]!.id) : 0;
+  state.phase = state.pendingReinforcements > 0 ? "reinforce" : "attack";
   return state;
 }
 
@@ -170,11 +174,11 @@ export function placeArmies(
     next.phase = "attack";
     return next;
   }
-  // Rodada inicial: passa para o próximo; depois do último, começam os turnos normais.
+  // Rodada inicial: passa para o próximo; depois do último, começa a rodada 1 (ataques).
   const following = state.currentPlayerIndex + 1;
   if (following < state.players.length) {
     next.currentPlayerIndex = following;
-    next.pendingReinforcements = reinforcementsFor(next, map, next.players[following]!.id);
+    next.pendingReinforcements = INITIAL_ARMIES;
     return next;
   }
   next.round = 1;
@@ -201,13 +205,18 @@ export function canAttack(
 ): boolean {
   const source = state.territories[from];
   const target = state.territories[to];
-  if (state.phase !== "attack" || state.pendingMove || !source || !target) return false;
+  if (state.phase !== "attack" || !source || !target) return false;
   return (
     source.owner === currentPlayer(state).id &&
     target.owner !== source.owner &&
     source.armies > 1 &&
     attackPenalty(map, from, to) !== null
   );
+}
+
+/** Com quantos soldados (dados) dá para atacar a partir de um estado: até 3, deixando 1. */
+export function maxAttackers(state: GameState, from: TerritoryId): number {
+  return Math.min(MAX_ATTACK_DICE, (state.territories[from]?.armies ?? 0) - 1);
 }
 
 export interface AttackOutcome {
@@ -220,9 +229,10 @@ export interface AttackOutcome {
 }
 
 /**
- * Um ataque: o atacante rola até 3 dados (deixando sempre 1 soldado para trás),
- * o defensor até 3. Ataques navais sofrem penalidade nos dados do atacante.
- * Ao conquistar, o atacante precisa escolher quantos soldados mover (`moveAfterConquest`).
+ * Um ataque com `soldiers` soldados (1 a 3, sempre deixando 1 na origem): cada soldado
+ * é um dado. O defensor rola um dado por soldado, até 3. O maior vence; empate é da defesa.
+ * Ataques navais sofrem penalidade nos dados do atacante.
+ * Se conquistar, os soldados que atacaram e sobreviveram ocupam o estado.
  */
 export function attack(
   state: GameState,
@@ -230,17 +240,20 @@ export function attack(
   from: TerritoryId,
   to: TerritoryId,
   rng: Rng = Math.random,
+  soldiers: number = maxAttackers(state, from),
 ): AttackOutcome {
   if (!canAttack(state, map, from, to)) throw new Error("Ataque inválido");
+  if (!Number.isInteger(soldiers) || soldiers < 1 || soldiers > maxAttackers(state, from)) {
+    throw new Error(`Ataque com 1 a ${maxAttackers(state, from)} soldados`);
+  }
   const penalty = attackPenalty(map, from, to)!;
   const next = structuredClone(state);
   const source = next.territories[from]!;
   const target = next.territories[to]!;
   const defender = target.owner;
 
-  const attackDice = Math.min(MAX_ATTACK_DICE, source.armies - 1);
   const defenseDice = Math.min(MAX_DEFENSE_DICE, target.armies);
-  const battle = compareRolls(rollDice(attackDice, rng), rollDice(defenseDice, rng), penalty);
+  const battle = compareRolls(rollDice(soldiers, rng), rollDice(defenseDice, rng), penalty);
 
   source.armies -= battle.attackerLosses;
   target.armies -= battle.defenderLosses;
@@ -248,34 +261,17 @@ export function attack(
   const conquered = target.armies === 0;
   let eliminated: PlayerId | null = null;
   if (conquered) {
+    const survivors = soldiers - battle.attackerLosses;
     target.owner = source.owner;
-    const max = Math.min(attackDice, source.armies - 1);
+    target.armies = survivors;
+    source.armies -= survivors;
     if (territoriesOf(next, defender).length === 0) eliminated = defender;
     if (alivePlayers(next).length === 1) {
-      // Último vivo: fim de jogo, move o máximo automaticamente.
-      target.armies = max;
-      source.armies -= max;
       next.winner = source.owner;
       next.phase = "finished";
-    } else {
-      next.pendingMove = { from, to, max };
     }
   }
   return { state: next, battle, conquered, naval: penalty > 0, eliminated };
-}
-
-/** Depois de conquistar: move de 1 até `max` soldados (no máximo os que atacaram). */
-export function moveAfterConquest(state: GameState, amount: number): GameState {
-  const move = state.pendingMove;
-  if (!move) throw new Error("Não há conquista pendente");
-  if (!Number.isInteger(amount) || amount < 1 || amount > move.max) {
-    throw new Error(`Mova de 1 a ${move.max} soldados`);
-  }
-  const next = structuredClone(state);
-  next.territories[move.from]!.armies -= amount;
-  next.territories[move.to]!.armies += amount;
-  next.pendingMove = null;
-  return next;
 }
 
 export function endAttackPhase(state: GameState): GameState {

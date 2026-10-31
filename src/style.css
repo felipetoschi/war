@@ -1,12 +1,12 @@
 :root {
-  --bg: #0f1b2a;
-  --panel: #182a3f;
-  --panel-2: #213750;
-  --text: #e8eef5;
-  --muted: #9fb0c3;
+  --sea: #1d4e6e;
+  --panel: #12263a;
+  --panel-2: #1f3a56;
+  --text: #eef3f8;
+  --muted: #a9bbcd;
   --accent: #f5c542;
   --attack: #d63c31;
-  --defense: #f4f1e8;
+  --defense: #f2c230;
   font-family:
     system-ui,
     -apple-system,
@@ -14,50 +14,40 @@
     Roboto,
     sans-serif;
   color: var(--text);
-  background: var(--bg);
+  background: var(--sea);
 }
 
 * {
   box-sizing: border-box;
 }
 
+html,
 body {
   margin: 0;
-  min-height: 100vh;
-  background: var(--bg);
-  /* toque: sem zoom no duplo toque e sem destaque azul */
+  height: 100%;
+}
+
+body {
+  /* a "mesa": mar ao fundo, sem bordas em volta do mapa */
+  background: radial-gradient(ellipse at center, #2a6a94 0%, #1d4e6e 55%, #133650 100%);
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
 }
 
-#app {
-  max-width: 1600px;
-  margin: 0 auto;
-  padding: 12px 16px;
-}
-
-/* ---- barra superior ---- */
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.topbar h1 {
-  margin: 0;
-  font-size: 1.4rem;
-}
-
-/* ---- textos ---- */
+h1,
 h2,
-h3 {
+h3,
+p {
   margin: 0;
+}
+
+h1 {
+  font-size: 1.5rem;
 }
 
 h2 {
-  font-size: 1.1rem;
+  font-size: 1.05rem;
 }
 
 h3 {
@@ -65,8 +55,7 @@ h3 {
 }
 
 p {
-  margin: 0;
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
 .muted {
@@ -77,7 +66,7 @@ p {
 
 .warn {
   color: var(--accent);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 /* ---- botões ---- */
@@ -85,34 +74,16 @@ button {
   font: inherit;
   padding: 10px 14px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--panel-2);
   color: var(--text);
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
 }
 
 button.primary {
   background: var(--accent);
   color: #1a1a1a;
-}
-
-button.link {
-  background: none;
-  color: var(--muted);
-  text-decoration: underline;
-  padding: 4px 0;
-  align-self: flex-start;
-}
-
-button.icon {
-  padding: 8px 12px;
-  font-size: 0.9rem;
-}
-
-button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
 }
 
 .chips {
@@ -122,19 +93,9 @@ button:disabled {
   align-items: center;
 }
 
-.chips.small {
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
 .chip {
-  min-width: 48px;
+  min-width: 52px;
   border: 2px solid transparent;
-}
-
-.chips.small .chip {
-  min-width: 44px;
-  padding: 8px 10px;
 }
 
 .chip.active {
@@ -142,24 +103,43 @@ button:disabled {
   color: var(--accent);
 }
 
+.attack-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--attack);
+  font-size: 1.1rem;
+}
+
+.attack-count .pawn {
+  width: 12px;
+  height: 16px;
+}
+
 /* ---- tela de jogadores ---- */
-.center {
+.setup-screen {
+  height: 100vh;
+  height: 100dvh;
   display: flex;
+  align-items: center;
   justify-content: center;
+  padding: 16px;
+  position: relative;
 }
 
 .card {
   background: var(--panel);
-  border-radius: 12px;
-  padding: 16px;
+  border-radius: 16px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  box-shadow: 0 10px 30px #0006;
 }
 
 .setup {
   width: 100%;
-  max-width: 520px;
+  max-width: 480px;
 }
 
 .names {
@@ -174,116 +154,216 @@ button:disabled {
   gap: 10px;
 }
 
+.name-input .reserve:empty {
+  opacity: 0.35;
+}
+
+.pawn {
+  width: 22px;
+  height: 30px;
+}
+
 .name-input input {
   flex: 1;
   font: inherit;
   padding: 10px;
   border-radius: 8px;
   border: 1px solid #3a5272;
-  background: #0f1b2a;
+  background: #0b1824;
   color: var(--text);
 }
 
-/* ---- layout do jogo: mapa sempre no centro ---- */
-.layout {
+/* ---- mesa: mapa no centro, jogadores nos cantos ---- */
+#app.table {
+  height: 100vh;
+  height: 100dvh;
+  width: 100vw;
+  padding: 10px;
   display: grid;
-  gap: 12px;
-  grid-template-areas: "left" "map" "right";
+  gap: 10px;
 }
 
-.side-left {
-  grid-area: left;
+/* Tablet deitado: cantos à esquerda e à direita, mapa no meio. */
+@media (orientation: landscape) {
+  #app.table {
+    grid-template-columns: minmax(230px, 23vw) minmax(0, 1fr) minmax(230px, 23vw);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      "tl map tr"
+      "bl map br";
+  }
+}
+
+/* Tablet em pé: cantos em cima e embaixo, mapa no meio. */
+@media (orientation: portrait) {
+  #app.table {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "tl tr"
+      "map map"
+      "bl br";
+  }
+}
+
+.seat-tl {
+  grid-area: tl;
+}
+.seat-tr {
+  grid-area: tr;
+}
+.seat-bl {
+  grid-area: bl;
+}
+.seat-br {
+  grid-area: br;
 }
 
 .board-wrap {
   grid-area: map;
+  position: relative;
   min-width: 0;
   min-height: 0;
 }
 
-.side-right {
-  grid-area: right;
+.board {
+  width: 100%;
+  height: 100%;
+  display: block;
+  -webkit-user-select: none;
+  user-select: none;
+  filter: drop-shadow(0 6px 10px #0005);
 }
 
-.side {
+/* ---- canto de cada jogador ---- */
+.seat {
+  --pc: #888;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 18px;
+  background: #0b1a2acc;
+  border: 3px solid transparent;
+  overflow: hidden;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+
+/* Jogadores sentados do lado de cima veem o painel virado para eles. */
+.seat-tl,
+.seat-tr {
+  transform: rotate(180deg);
+}
+
+.seat.empty {
+  background: transparent;
+  border: 0;
+}
+
+.seat.current {
+  border-color: var(--pc);
+  box-shadow: 0 0 22px var(--pc);
+}
+
+.seat.out {
+  opacity: 0.45;
+}
+
+.seat-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.seat-head .swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--pc);
+  align-self: center;
+}
+
+.seat-name {
+  font-size: 1.15rem;
+}
+
+.place {
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.seat-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.seat-dice {
+  display: flex;
+  gap: 10px;
   min-height: 0;
 }
 
-.box {
-  background: var(--panel);
-  border-radius: 12px;
-  padding: 14px;
+.seat-dice:empty {
+  display: none;
+}
+
+.seat-actions {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
-/* Tablet deitado (e computador): informações nas laterais, mapa no meio. */
-@media (min-width: 900px) and (orientation: landscape) {
-  #app.in-game {
-    height: 100vh;
-    height: 100dvh;
-    display: flex;
-    flex-direction: column;
-  }
-
-  #app.in-game .layout {
-    flex: 1;
-    min-height: 0;
-    grid-template-areas: "left map right";
-    grid-template-columns: 270px minmax(0, 1fr) 240px;
-  }
-
-  #app.in-game .side {
-    overflow-y: auto;
-  }
-
-  #app.in-game .board {
-    height: 100%;
-  }
+.seat-actions:empty {
+  display: none;
 }
 
-/* Tablet em pé: informações em cima e embaixo, mapa no meio. */
-@media (min-width: 600px) and (orientation: portrait) {
-  #app.in-game {
-    height: 100vh;
-    height: 100dvh;
-    display: flex;
-    flex-direction: column;
-  }
-
-  #app.in-game .layout {
-    flex: 1;
-    min-height: 0;
-    grid-template-rows: auto minmax(0, 1fr) auto;
-  }
-
-  #app.in-game .side {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    align-items: start;
-  }
-
-  #app.in-game .side-left .box:only-child {
-    grid-column: 1 / -1;
-  }
-
-  #app.in-game .side-right {
-    max-height: 26vh;
-    overflow-y: auto;
-  }
-
-  #app.in-game .board {
-    height: 100%;
-  }
+.note {
+  font-size: 0.92rem;
 }
 
-/* ---- dados com pontinhos (estilo bozó) ---- */
+.note.big {
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+
+/* soldadinhos na borda de cada jogador */
+.reserve {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 2px;
+  min-height: 36px;
+  padding: 4px 6px;
+  border-radius: 10px;
+  background: #0006;
+  box-shadow: inset 0 2px 6px #0008;
+}
+
+.reserve:empty {
+  opacity: 0.35;
+}
+
+.pawn {
+  width: 22px;
+  height: 30px;
+  filter: drop-shadow(0 2px 1px #0009);
+}
+
+.reserve-extra {
+  font-weight: 800;
+  margin-left: 4px;
+  align-self: center;
+}
+
+/* ---- dados físicos (vermelho ataca, amarelo defende) ---- */
 .die3d {
-  --size: 52px;
+  --size: 54px;
   width: var(--size);
   height: var(--size);
   padding: calc(var(--size) * 0.14);
@@ -292,17 +372,17 @@ button:disabled {
   grid-template-columns: repeat(3, 1fr);
   grid-template-rows: repeat(3, 1fr);
   place-items: center;
-  background: var(--defense);
+  background: linear-gradient(145deg, #ffffff, #dcd8cc);
   box-shadow:
-    inset 0 -4px 0 #0002,
-    inset 0 2px 0 #fff8,
-    0 3px 6px #0006;
+    inset 0 -5px 0 #0003,
+    inset 0 2px 0 #fff9,
+    0 4px 8px #000a;
   transition: opacity 0.2s;
   flex: none;
 }
 
 .die3d.md {
-  --size: 38px;
+  --size: 40px;
 }
 
 .die3d i {
@@ -317,16 +397,20 @@ button:disabled {
 }
 
 .die3d.attack {
-  background: var(--attack);
+  background: linear-gradient(145deg, #ef5a4c, #b72d23);
 }
 
 .die3d.attack i.on {
   background: #fff;
 }
 
+.die3d.defense {
+  background: linear-gradient(145deg, #ffd95a, #d9a514);
+}
+
 .die3d.lost {
   opacity: 0.35;
-  filter: grayscale(0.6);
+  filter: grayscale(0.7);
 }
 
 .die3d.rolling {
@@ -357,30 +441,6 @@ button:disabled {
   }
 }
 
-/* bandeja de dados da batalha */
-.tray {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.tray-title {
-  font-weight: 700;
-}
-
-.tray-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.tray-label {
-  width: 56px;
-  align-self: center;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
 .die-slot {
   display: inline-flex;
   flex-direction: column;
@@ -393,67 +453,18 @@ button:disabled {
   font-size: 0.7rem;
 }
 
-.tray-summary {
-  font-weight: 600;
-}
-
-/* ordem de jogada */
-.order {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.order li {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  min-height: 54px;
-  padding: 6px 10px;
-  background: var(--panel-2);
-  border-radius: 8px;
-}
-
-.order .who {
-  flex: 1;
-  min-width: 90px;
-}
-
-.order .dice {
-  display: flex;
-  gap: 6px;
-}
-
-.roll {
-  padding: 8px 10px;
-}
-
 /* ---- mapa ---- */
-.board {
-  width: 100%;
-  height: auto;
-  background: #1d4e6e;
-  border-radius: 12px;
-  display: block;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
 .board .state {
   stroke: #0f1b2a;
   stroke-width: 1;
   cursor: pointer;
-  transition: filter 0.15s;
+  transition:
+    filter 0.15s,
+    opacity 0.15s;
 }
 
-@media (hover: hover) {
-  .board .state:hover {
-    filter: brightness(1.15);
-  }
+.board .state.dim {
+  opacity: 0.55;
 }
 
 .board .state.selected {
@@ -534,51 +545,74 @@ button:disabled {
   stroke-width: 2.5px;
 }
 
-/* ---- painéis ---- */
-.swatch {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  display: inline-block;
-  flex: none;
-  vertical-align: -2px;
-  margin-right: 6px;
+/* ---- status e ferramentas sobre o mapa ---- */
+.status {
+  /* canto inferior esquerdo da área do mapa: só tem mar ali */
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  max-width: 45%;
+  padding: 6px 14px;
+  border-radius: 14px;
+  background: #0b1a2acc;
+  font-weight: 700;
+  font-size: 0.9rem;
+  pointer-events: none;
 }
 
-.players,
+.toolbar {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 6px;
+}
+
+.setup-screen .toolbar {
+  top: 12px;
+  right: 12px;
+}
+
+.tool {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  font-size: 1.2rem;
+  background: #0b1a2acc;
+}
+
+/* ---- menu ---- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: #0009;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 10;
+}
+
+.menu {
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.rules {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.92rem;
+}
+
 .regions {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.players li {
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: 1px solid transparent;
-}
-
-.players li .muted {
-  display: block;
-  margin-left: 20px;
-}
-
-.players .place {
-  color: var(--accent);
-  font-weight: 800;
-  margin-right: 6px;
-}
-
-.players li.current {
-  border-color: var(--accent);
-}
-
-.players li.out {
-  opacity: 0.4;
-  text-decoration: line-through;
 }
 
 .regions li {
@@ -590,14 +624,19 @@ button:disabled {
 .log {
   font-size: 0.8rem;
   color: var(--muted);
-  max-height: 180px;
+  max-height: 160px;
   overflow-y: auto;
   margin: 0;
   padding-left: 18px;
 }
 
+.menu-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .credits {
-  margin: 12px 0 0;
   font-size: 0.75rem;
   color: var(--muted);
   text-align: center;
