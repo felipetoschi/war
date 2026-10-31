@@ -5,18 +5,19 @@ Valores marcados com ⚙️ são configuráveis no código e podem ser ajustados
 
 ## Visão geral
 
-- Jogo de estratégia por turnos, simples, no estilo dos clássicos de conquista de territórios.
+- Jogo de estratégia por turnos, no estilo do War clássico.
 - **Mapa:** somente o Brasil, com os **26 estados + Distrito Federal** (27 territórios).
-- **Jogadores:** de **2 a 5**.
-- **Objetivos abertos:** cada jogador recebe um objetivo sorteado, e **todos veem o objetivo de todos**.
-- **Combate com dados virtuais**, no esquema tradicional (até 3 dados de ataque contra até 3 de defesa).
+- **Jogadores:** de **2 a 5**, no mesmo aparelho, revezando a vez.
+- **Objetivo:** ser o **último jogador vivo** (por enquanto é o único objetivo).
+- **Combate com dados virtuais**, como no War clássico (até 3 dados de ataque contra até 3 de defesa).
 - **Diferencial — ataque naval:** estados do litoral podem atacar outros estados do litoral,
   mesmo sem fazer fronteira com eles, mas com **penalidade nos dados proporcional à distância**.
+- Botão de **tela cheia** no canto superior direito.
 
 ## Regiões e bônus
 
 As regiões do IBGE fazem o papel de "continentes". Quem domina uma região inteira recebe
-exércitos extras em todo reforço.
+soldados extras sempre que for posicionar soldados.
 
 | Região       | Estados                            | Qtde | Bônus ⚙️ |
 | ------------ | ---------------------------------- | ---- | -------- |
@@ -28,32 +29,51 @@ exércitos extras em todo reforço.
 
 ## Preparação
 
-1. Escolhe-se o número de jogadores (2 a 5). A ordem de jogada é sorteada.
-2. Cada jogador recebe **um objetivo sorteado** (nunca dois jogadores com o mesmo), visível a todos.
-3. Os 27 estados são sorteados entre os jogadores, o mais igualmente possível,
-   com **1 exército** em cada.
+1. **Jogadores:** escolhe-se de 2 a 5 jogadores e o nome de cada um.
+2. **Quem começa:** cada jogador rola um dado virtual. Quem tirar mais joga primeiro, e a ordem
+   segue do maior para o menor. Empatados rolam de novo entre si até desempatar.
+3. **Escolha dos estados:** seguindo a ordem de jogada, cada jogador escolhe **um estado livre
+   por vez** no mapa, até os 27 terem dono. Cada estado escolhido recebe **1 soldado**.
+   Com 27 estados, a divisão fica:
+
+   | Jogadores | Estados por jogador |
+   | --------- | ------------------- |
+   | 2         | 14, 13              |
+   | 3         | 9, 9, 9             |
+   | 4         | 7, 7, 7, 6          |
+   | 5         | 6, 6, 5, 5, 5       |
+
+4. **Rodada inicial:** na ordem de jogada, cada jogador posiciona soldados nos seus estados pela
+   regra clássica (abaixo). **Nesta rodada ninguém ataca.** Depois do último jogador,
+   começa a rodada 1, de novo pelo primeiro.
+
+## Quantos soldados recebo
+
+Regra clássica do War, usada na rodada inicial e no começo de cada turno: ⚙️
+
+- **metade do número de estados que possui** (arredondado para baixo), **no mínimo 3**;
+- **mais o bônus** de cada região que domina por inteiro.
+
+Exemplo: com 9 estados, recebe 4. Com 5 estados, recebe 3 (o mínimo).
 
 ## O turno
 
-Cada turno tem três fases, nesta ordem:
-
 ### 1. Reforço
 
-O jogador recebe exércitos e os distribui como quiser entre os seus estados:
-
-- **metade do número de estados que possui** (arredondado para baixo), **mínimo 3**; ⚙️
-- **mais o bônus** de cada região que domina por inteiro.
+Posicione os soldados recebidos nos seus estados, como quiser.
+Dá para colocar 1, 3 ou todos de uma vez em cada clique.
 
 ### 2. Ataque (opcional, quantas vezes quiser)
 
-- Ataca-se a partir de um estado próprio com **pelo menos 2 exércitos** (1 sempre fica para trás).
-- O atacante rola **até 3 dados** (no máximo exércitos − 1); o defensor rola **até 3 dados**
-  (no máximo o número de exércitos que tem).
+- Ataca-se a partir de um estado próprio com **pelo menos 2 soldados** (1 sempre fica para trás).
+- O atacante rola **até 3 dados** (no máximo soldados − 1); o defensor rola **até 3 dados**
+  (no máximo o número de soldados que tem).
 - Os dados são ordenados do maior para o menor e comparados em pares:
   o maior do ataque contra o maior da defesa, e assim por diante.
-- Em cada par, quem tirar menos perde 1 exército. **Empate: vence a defesa.**
-- Se o estado defensor ficar sem exércitos, ele é conquistado e os exércitos atacantes
-  que sobreviveram ao combate passam para ele.
+- Em cada par, quem tirar menos perde 1 soldado. **Empate: vence a defesa.**
+- **Conquista:** se o estado defensor ficar sem soldados, ele passa para o atacante, que escolhe
+  quantos soldados mover para lá: **de 1 até o número de dados que usou no ataque**
+  (sempre deixando ao menos 1 na origem).
 
 #### Rotas de ataque
 
@@ -80,45 +100,22 @@ conforme a distância (o dado nunca fica abaixo de 1): ⚙️
 | 9 ou mais            | −3                      | RN → RS (11), AP → SP (13) |
 
 A penalidade vale nos dois sentidos: RN → RS e RS → RN sofrem os mesmos −3.
-Com −3, um 6 vira 3. Como o empate favorece a defesa, um ataque de um extremo a outro
-do país só funciona contra estados mal defendidos — é um recurso para surpreender,
-não para substituir o avanço por terra.
 
 ### 3. Remanejamento (opcional)
 
-Move exércitos entre **estados próprios que fazem fronteira** (só por terra),
-deixando sempre pelo menos 1 exército no estado de origem.
+Move soldados entre **estados próprios que fazem fronteira** (só por terra),
+deixando sempre pelo menos 1 soldado no estado de origem.
+Como no War clássico, **um soldado remanejado não pode ser movido de novo no mesmo turno**.
 
-## Vitória
+## Eliminação e vitória
 
-Vence quem, **durante o próprio turno**, cumprir o seu objetivo — ou dominar os 27 estados.
-Como os objetivos são abertos, todos sabem o que cada adversário precisa e podem se defender.
-
-### Objetivos ⚙️
-
-| Objetivo                                             | Estados necessários |
-| ---------------------------------------------------- | ------------------- |
-| Conquistar o Nordeste e o Sul                        | 12                  |
-| Conquistar o Norte e o Sul                           | 10                  |
-| Conquistar o Norte e o Centro-Oeste                  | 11                  |
-| Conquistar o Nordeste e o Centro-Oeste               | 13                  |
-| Conquistar o Sudeste e o Nordeste                    | 13                  |
-| Conquistar o Sudeste, o Centro-Oeste e o Sul         | 11                  |
-| Ocupar 18 estados                                    | 18                  |
-| Ocupar 14 estados com pelo menos 2 exércitos em cada | 14                  |
-
-## Eliminação
-
-Um jogador sem estados está fora da partida e sua vez é pulada.
+- Quem perde todos os estados está fora da partida, e a vez dele é pulada.
+- **Vence o último jogador vivo** — ou seja, quem dominar os 27 estados.
 
 ## Em aberto (para decidir)
 
-- [ ] **Penalidade naval:** as faixas −1 / −2 / −3 estão boas? Alternativa: em vez de tirar pontos,
-      o atacante rolaria **menos dados** em ataques longos.
-- [ ] **Limite de ataques navais** por turno (ex.: 1 conquista pelo mar por turno)?
-- [ ] **Movimento após conquista:** hoje passam automaticamente os exércitos que atacaram.
-      Deixar o jogador escolher quantos mover?
-- [ ] **Partidas com 2 jogadores:** cada um começa com 13–14 estados, então "ocupar 14 estados
-      com 2 exércitos" fica fácil. Usar objetivos mais difíceis, ou só a conquista total?
-- [ ] **Bônus da capital:** quem tiver o DF ganha +1 exército por reforço?
-- [ ] **Primeira rodada sem ataques**, para ninguém começar com vantagem por jogar primeiro?
+- [ ] **Objetivos:** voltar com objetivos (abertos ou secretos) como alternativa ao "último vivo"?
+- [ ] **Cartas de território**, como no War clássico (ganha uma carta por turno com conquista
+      e troca trios por soldados extras)?
+- [ ] **Penalidade naval:** as faixas −1 / −2 / −3 estão boas? Limitar ataques pelo mar por turno?
+- [ ] **Bônus da capital:** quem tiver o DF ganha +1 soldado por reforço?

@@ -1,6 +1,5 @@
 import { compareRolls, rollDice, type BattleResult } from "./dice";
 import { areNeighbors, coastDistance } from "./map";
-import { isObjectiveComplete, OBJECTIVES } from "./objectives";
 import type { GameMap, GameState, Player, PlayerId, Rng, TerritoryId } from "./types";
 
 export const MIN_PLAYERS = 2;
@@ -19,46 +18,25 @@ export function navalPenalty(distance: number): number {
   return 3;
 }
 
-function shuffle<T>(items: T[], rng: Rng): T[] {
-  const copy = [...items];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [copy[i], copy[j]] = [copy[j]!, copy[i]!];
-  }
-  return copy;
-}
-
 /**
- * Cria uma partida: sorteia a ordem dos jogadores, um objetivo aberto para cada
- * e distribui os estados igualmente (1 exército em cada).
+ * Cria uma partida. `players` já deve vir na ordem de jogada (decidida nos dados).
+ * A partida começa com a escolha de estados, todos ainda sem dono.
  */
-export function createGame(map: GameMap, players: Player[], rng: Rng = Math.random): GameState {
+export function createGame(players: Player[]): GameState {
   if (players.length < MIN_PLAYERS || players.length > MAX_PLAYERS) {
     throw new Error(`O jogo aceita de ${MIN_PLAYERS} a ${MAX_PLAYERS} jogadores`);
   }
-  const order = shuffle(players, rng);
-  const objectives: GameState["objectives"] = {};
-  shuffle(OBJECTIVES, rng)
-    .slice(0, order.length)
-    .forEach((objective, i) => (objectives[order[i]!.id] = objective));
-
-  const territories: GameState["territories"] = {};
-  shuffle(map.territories, rng).forEach((t, i) => {
-    territories[t.id] = { owner: order[i % order.length]!.id, armies: 1 };
-  });
-
-  const state: GameState = {
-    players: order,
-    objectives,
-    territories,
+  return {
+    players,
+    territories: {},
     currentPlayerIndex: 0,
-    phase: "reinforce",
-    turn: 1,
+    phase: "claim",
+    round: 0,
     pendingReinforcements: 0,
+    pendingMove: null,
+    fortified: {},
     winner: null,
   };
-  state.pendingReinforcements = reinforcementsFor(state, map, order[0]!.id);
-  return state;
 }
 
 export function currentPlayer(state: GameState): Player {
@@ -66,7 +44,11 @@ export function currentPlayer(state: GameState): Player {
 }
 
 export function territoriesOf(state: GameState, player: PlayerId): TerritoryId[] {
-  return Object.keys(state.territories).filter((id) => state.territories[id]!.owner === player);
+  return Object.keys(state.territories).filter((id) => state.territories[id]?.owner === player);
+}
+
+export function alivePlayers(state: GameState): Player[] {
+  return state.players.filter((p) => territoriesOf(state, p.id).length > 0);
 }
 
 export function controlsRegion(
@@ -80,7 +62,7 @@ export function controlsRegion(
     .every((t) => state.territories[t.id]?.owner === player);
 }
 
-/** Metade dos estados (mínimo 3) + bônus de cada região dominada. */
+/** Regra clássica: metade dos estados (mínimo 3) + bônus de cada região dominada. */
 export function reinforcementsFor(state: GameState, map: GameMap, player: PlayerId): number {
   const base = Math.max(MIN_REINFORCEMENTS, Math.floor(territoriesOf(state, player).length / 2));
   const bonus = map.regions
@@ -89,46 +71,78 @@ export function reinforcementsFor(state: GameState, map: GameMap, player: Player
   return base + bonus;
 }
 
-/** Vitória: cumprir o próprio objetivo ou dominar todos os estados. */
-function checkVictory(state: GameState, map: GameMap): GameState {
-  const player = currentPlayer(state).id;
-  const objective = state.objectives[player];
-  const ownsAll = territoriesOf(state, player).length === map.territories.length;
-  if (ownsAll || (objective && isObjectiveComplete(state, map, player, objective))) {
-    state.winner = player;
-    state.phase = "finished";
-  }
-  return state;
-}
-
-function assertPhase(state: GameState, phase: GameState["phase"]): void {
-  if (state.phase !== phase) throw new Error(`Ação inválida na fase "${state.phase}"`);
+function assertPhase(state: GameState, ...phases: GameState["phase"][]): void {
+  if (!phases.includes(state.phase)) throw new Error(`Ação inválida na fase "${state.phase}"`);
+  if (state.pendingMove)
+    throw new Error("Escolha quantos soldados mover para o estado conquistado");
 }
 
 function assertOwnedByCurrent(state: GameState, id: TerritoryId): void {
   const territory = state.territories[id];
-  if (!territory) throw new Error(`Território desconhecido: ${id}`);
+  if (!territory) throw new Error(`Estado sem dono: ${id}`);
   if (territory.owner !== currentPlayer(state).id) {
-    throw new Error("Território não pertence ao jogador da vez");
+    throw new Error("Esse estado não é do jogador da vez");
   }
 }
 
+/** Começa o turno normal de um jogador, na fase de reforço. */
+function startTurn(state: GameState, map: GameMap, index: number): GameState {
+  state.currentPlayerIndex = index;
+  state.phase = "reinforce";
+  state.fortified = {};
+  state.pendingReinforcements = reinforcementsFor(state, map, state.players[index]!.id);
+  return state;
+}
+
+/** Escolha de estados: cada jogador, na sua vez, pega um estado livre (com 1 soldado). */
+export function claimTerritory(state: GameState, map: GameMap, territory: TerritoryId): GameState {
+  assertPhase(state, "claim");
+  if (!map.territories.some((t) => t.id === territory)) {
+    throw new Error(`Estado desconhecido: ${territory}`);
+  }
+  if (state.territories[territory]) throw new Error("Esse estado já foi escolhido");
+  const next = structuredClone(state);
+  next.territories[territory] = { owner: currentPlayer(state).id, armies: 1 };
+  next.currentPlayerIndex = (state.currentPlayerIndex + 1) % state.players.length;
+
+  if (Object.keys(next.territories).length === map.territories.length) {
+    next.phase = "placement";
+    next.currentPlayerIndex = 0;
+    next.pendingReinforcements = reinforcementsFor(next, map, next.players[0]!.id);
+  }
+  return next;
+}
+
+/** Posiciona soldados na rodada inicial ou no reforço do turno. */
 export function placeArmies(
   state: GameState,
   map: GameMap,
   territory: TerritoryId,
   amount: number,
 ): GameState {
-  assertPhase(state, "reinforce");
+  assertPhase(state, "placement", "reinforce");
   assertOwnedByCurrent(state, territory);
   if (!Number.isInteger(amount) || amount < 1 || amount > state.pendingReinforcements) {
-    throw new Error("Quantidade de exércitos inválida");
+    throw new Error("Quantidade de soldados inválida");
   }
   const next = structuredClone(state);
   next.territories[territory]!.armies += amount;
   next.pendingReinforcements -= amount;
-  if (next.pendingReinforcements === 0) next.phase = "attack";
-  return checkVictory(next, map);
+  if (next.pendingReinforcements > 0) return next;
+
+  if (next.phase === "reinforce") {
+    next.phase = "attack";
+    return next;
+  }
+  // Rodada inicial: passa para o próximo; depois do último, começam os turnos normais.
+  const following = state.currentPlayerIndex + 1;
+  if (following < state.players.length) {
+    next.currentPlayerIndex = following;
+    next.pendingReinforcements = reinforcementsFor(next, map, next.players[following]!.id);
+    return next;
+  }
+  next.round = 1;
+  return startTurn(next, map, 0);
 }
 
 /**
@@ -151,7 +165,7 @@ export function canAttack(
 ): boolean {
   const source = state.territories[from];
   const target = state.territories[to];
-  if (state.phase !== "attack" || !source || !target) return false;
+  if (state.phase !== "attack" || state.pendingMove || !source || !target) return false;
   return (
     source.owner === currentPlayer(state).id &&
     target.owner !== source.owner &&
@@ -165,12 +179,14 @@ export interface AttackOutcome {
   battle: BattleResult;
   conquered: boolean;
   naval: boolean;
+  /** Dono anterior, se foi eliminado com esta conquista. */
+  eliminated: PlayerId | null;
 }
 
 /**
- * Um ataque: o atacante rola até 3 dados (deixando sempre 1 exército para trás),
+ * Um ataque: o atacante rola até 3 dados (deixando sempre 1 soldado para trás),
  * o defensor até 3. Ataques navais sofrem penalidade nos dados do atacante.
- * Se conquistar, move os exércitos que sobreviveram ao ataque.
+ * Ao conquistar, o atacante precisa escolher quantos soldados mover (`moveAfterConquest`).
  */
 export function attack(
   state: GameState,
@@ -184,6 +200,7 @@ export function attack(
   const next = structuredClone(state);
   const source = next.territories[from]!;
   const target = next.territories[to]!;
+  const defender = target.owner;
 
   const attackDice = Math.min(MAX_ATTACK_DICE, source.armies - 1);
   const defenseDice = Math.min(MAX_DEFENSE_DICE, target.armies);
@@ -192,16 +209,37 @@ export function attack(
   source.armies -= battle.attackerLosses;
   target.armies -= battle.defenderLosses;
 
-  let conquered = false;
-  if (target.armies === 0) {
-    conquered = true;
-    const moving = attackDice - battle.attackerLosses;
+  const conquered = target.armies === 0;
+  let eliminated: PlayerId | null = null;
+  if (conquered) {
     target.owner = source.owner;
-    target.armies = moving;
-    source.armies -= moving;
-    checkVictory(next, map);
+    const max = Math.min(attackDice, source.armies - 1);
+    if (territoriesOf(next, defender).length === 0) eliminated = defender;
+    if (alivePlayers(next).length === 1) {
+      // Último vivo: fim de jogo, move o máximo automaticamente.
+      target.armies = max;
+      source.armies -= max;
+      next.winner = source.owner;
+      next.phase = "finished";
+    } else {
+      next.pendingMove = { from, to, max };
+    }
   }
-  return { state: next, battle, conquered, naval: penalty > 0 };
+  return { state: next, battle, conquered, naval: penalty > 0, eliminated };
+}
+
+/** Depois de conquistar: move de 1 até `max` soldados (no máximo os que atacaram). */
+export function moveAfterConquest(state: GameState, amount: number): GameState {
+  const move = state.pendingMove;
+  if (!move) throw new Error("Não há conquista pendente");
+  if (!Number.isInteger(amount) || amount < 1 || amount > move.max) {
+    throw new Error(`Mova de 1 a ${move.max} soldados`);
+  }
+  const next = structuredClone(state);
+  next.territories[move.from]!.armies -= amount;
+  next.territories[move.to]!.armies += amount;
+  next.pendingMove = null;
+  return next;
 }
 
 export function endAttackPhase(state: GameState): GameState {
@@ -209,7 +247,16 @@ export function endAttackPhase(state: GameState): GameState {
   return { ...state, phase: "fortify" };
 }
 
-/** Remanejamento: move exércitos entre dois estados vizinhos (por terra) do jogador da vez. */
+/** Soldados de um estado que ainda podem ser remanejados neste turno. */
+export function movableArmies(state: GameState, territory: TerritoryId): number {
+  const armies = state.territories[territory]?.armies ?? 0;
+  return Math.max(0, armies - 1 - (state.fortified[territory] ?? 0));
+}
+
+/**
+ * Remanejamento: move soldados entre estados vizinhos (por terra) do jogador da vez.
+ * Fica sempre 1 soldado na origem, e quem já foi remanejado não se move de novo no turno.
+ */
 export function fortify(
   state: GameState,
   map: GameMap,
@@ -220,31 +267,25 @@ export function fortify(
   assertPhase(state, "fortify");
   assertOwnedByCurrent(state, from);
   assertOwnedByCurrent(state, to);
-  if (!areNeighbors(map, from, to)) throw new Error("Estados não fazem fronteira");
-  const source = state.territories[from]!;
-  if (!Number.isInteger(amount) || amount < 1 || amount >= source.armies) {
-    throw new Error("Quantidade de exércitos inválida");
+  if (!areNeighbors(map, from, to)) throw new Error("Os estados não fazem fronteira");
+  if (!Number.isInteger(amount) || amount < 1 || amount > movableArmies(state, from)) {
+    throw new Error("Esses soldados não podem ser remanejados");
   }
   const next = structuredClone(state);
   next.territories[from]!.armies -= amount;
   next.territories[to]!.armies += amount;
-  return checkVictory(next, map);
+  next.fortified[to] = (next.fortified[to] ?? 0) + amount;
+  return next;
 }
 
-/** Passa a vez para o próximo jogador que ainda tem estados. */
+/** Passa a vez para o próximo jogador ainda vivo. */
 export function endTurn(state: GameState, map: GameMap): GameState {
-  if (state.phase === "finished") throw new Error("A partida já terminou");
-  if (state.phase === "reinforce") {
-    throw new Error("Posicione todos os reforços antes de passar a vez");
-  }
+  assertPhase(state, "attack", "fortify");
   const next = structuredClone(state);
   let index = state.currentPlayerIndex;
   do {
     index = (index + 1) % state.players.length;
-    if (index === 0) next.turn++;
+    if (index === 0) next.round++;
   } while (territoriesOf(next, state.players[index]!.id).length === 0);
-  next.currentPlayerIndex = index;
-  next.phase = "reinforce";
-  next.pendingReinforcements = reinforcementsFor(next, map, state.players[index]!.id);
-  return next;
+  return startTurn(next, map, index);
 }

@@ -38,32 +38,38 @@ export interface Player {
   color: string;
 }
 
-export type Objective =
-  | { id: string; kind: "regions"; regions: RegionId[]; description: string }
-  | {
-      id: string;
-      kind: "territories";
-      count: number;
-      minArmies: number;
-      description: string;
-    };
-
 export interface TerritoryState {
   owner: PlayerId;
   armies: number;
 }
 
-export type Phase = "reinforce" | "attack" | "fortify" | "finished";
+/**
+ * - claim: jogadores escolhem estados, um por vez, na ordem de jogada
+ * - placement: rodada inicial, cada jogador posiciona seus soldados (sem ataques)
+ * - reinforce / attack / fortify: fases de um turno normal
+ */
+export type Phase = "claim" | "placement" | "reinforce" | "attack" | "fortify" | "finished";
+
+/** Movimento obrigatório depois de conquistar um estado. */
+export interface PendingMove {
+  from: TerritoryId;
+  to: TerritoryId;
+  max: number;
+}
 
 export interface GameState {
+  /** Jogadores na ordem de jogada. */
   players: Player[];
-  /** Objetivo de cada jogador — abertos, todos podem ver. */
-  objectives: Record<PlayerId, Objective>;
-  territories: Record<TerritoryId, TerritoryState>;
+  /** Estados ainda não escolhidos ficam ausentes. */
+  territories: Partial<Record<TerritoryId, TerritoryState>>;
   currentPlayerIndex: number;
   phase: Phase;
-  turn: number;
-  /** Exércitos ainda a posicionar na fase de reforço. */
+  /** 0 durante a escolha de estados e a rodada inicial; depois 1, 2, 3… */
+  round: number;
+  /** Soldados ainda a posicionar (rodada inicial ou reforço). */
   pendingReinforcements: number;
+  pendingMove: PendingMove | null;
+  /** Soldados que chegaram por remanejamento neste turno (não podem se mover de novo). */
+  fortified: Partial<Record<TerritoryId, number>>;
   winner: PlayerId | null;
 }
