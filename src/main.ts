@@ -1,13 +1,14 @@
 import "./style.css";
 import { BRASIL_MAP } from "./game/brasil";
+import { hasValidSet, isValidSet, MAX_HAND, OWNED_CARD_BONUS, tradeValue } from "./game/cards";
 import type { BattleResult } from "./game/dice";
 import { getTerritory } from "./game/map";
 import {
-  attack,
-  attackPenalty,
+  cancelAttack,
   canAttack,
   createGame,
   currentPlayer,
+  declareAttack,
   endAttackPhase,
   endTurn,
   fortify,
@@ -16,12 +17,17 @@ import {
   maxAttackers,
   MIN_PLAYERS,
   movableArmies,
+  mustTrade,
   placeArmies,
   playersToRollForOrder,
+  rollAttack,
+  rollDefense,
   rollForOrder,
+  skipReinforce,
   territoriesOf,
+  tradeCards,
 } from "./game/rules";
-import type { GameState, Player, PlayerId, TerritoryId } from "./game/types";
+import type { Card, GameState, Player, PlayerId, TerritoryId } from "./game/types";
 import { LABELS, STATE_PATHS, VIEW_BOX } from "./ui/brasil-svg";
 import { animateDice, dieHtml, ROLL_MS } from "./ui/dice";
 import {
@@ -35,6 +41,18 @@ import { pawnSvg, reserveHtml } from "./ui/pieces";
 const map = BRASIL_MAP;
 const COLORS = ["#d63c31", "#2f6fd6", "#1f9a52", "#8e44ad"];
 const CREDITS = `Mapa: <a href="https://github.com/VictorCazanave/svg-maps" target="_blank" rel="noopener">svg-maps</a> (CC BY 4.0)`;
+const SYMBOL_GLYPH: Record<Card["symbol"], string> = {
+  square: "■",
+  triangle: "▲",
+  circle: "●",
+  joker: "★",
+};
+const SYMBOL_NAME: Record<Card["symbol"], string> = {
+  square: "quadrado",
+  triangle: "triângulo",
+  circle: "bola",
+  joker: "coringa",
+};
 
 /**
  * Lugares à mesa: cada jogador fica num canto do tablet.
@@ -50,7 +68,6 @@ interface LastBattle {
   attacker: PlayerId;
   defender: PlayerId;
   battle: BattleResult;
-  naval: boolean;
   conquered: boolean;
 }
 
@@ -62,9 +79,11 @@ let seats: Record<PlayerId, Seat> = {};
 let state: GameState | null = null;
 /** Enquanto os dados rolam, o tabuleiro mostra o estado de antes da rolagem. */
 let frozen: GameState | null = null;
-let rolling = false;
+/** Quais dados estão rolando agora. */
+let rolling: "order" | "attack" | "defense" | null = null;
 let selected: TerritoryId | null = null;
 let target: TerritoryId | null = null;
+let selectedCards: string[] = [];
 let lastBattle: LastBattle | null = null;
 let menuOpen = false;
 const log: string[] = [];
@@ -85,6 +104,8 @@ const sigla = (id: TerritoryId) => id.toUpperCase();
 const stateName = (id: TerritoryId) => getTerritory(map, id).name;
 const playerById = (game: GameState, id: string) => game.players.find((p) => p.id === id)!;
 const nameOf = (p: Player) => escapeHtml(p.name);
+const cardLabel = (c: Card) =>
+  `${c.territory ? sigla(c.territory) : "Coringa"} ${SYMBOL_GLYPH[c.symbol]}`;
 
 function addLog(message: string) {
   if (deferredLog) {
@@ -96,33 +117,50 @@ function addLog(message: string) {
 }
 
 /** Aplica uma jogada com dados: anima a rolagem e só depois mostra o resultado. */
-function withDiceRoll(update: () => void) {
+function withDiceRoll(kind: NonNullable<typeof rolling>, update: () => void) {
   const before = state;
   const id = gameId;
   const messages: string[] = [];
   deferredLog = messages;
-  update();
+  try {
+    update();
+  } catch (error) {
+    deferredLog = null;
+    addLog(`⚠ ${(error as Error).message}`);
+    render();
+    return;
+  }
   deferredLog = null;
   frozen = before;
-  rolling = true;
+  rolling = kind;
   render();
   setTimeout(() => {
     if (id !== gameId) return;
-    rolling = false;
+    rolling = null;
     frozen = null;
     messages.forEach(addLog);
     render();
   }, ROLL_MS);
 }
 
+function act(update: () => void) {
+  try {
+    update();
+  } catch (error) {
+    addLog(`⚠ ${(error as Error).message}`);
+  }
+  render();
+}
+
 function resetToSetup() {
   gameId++;
-  rolling = false;
+  rolling = null;
   frozen = null;
   screen = "players";
   state = null;
   selected = null;
   target = null;
+  selectedCards = [];
   lastBattle = null;
   menuOpen = false;
   log.length = 0;
@@ -162,31 +200,33 @@ function renderPlayersScreen(): string {
     </div>`;
 }
 
-// ---- ações no mapa ----
+// ---- ações ----
 function onTerritoryClick(id: TerritoryId) {
-  if (!state || rolling) return;
+  if (!state || rolling || state.battle) return;
   const owner = state.territories[id]?.owner;
   const me = currentPlayer(state).id;
-  try {
-    switch (state.phase) {
+  act(() => {
+    switch (state!.phase) {
       case "placement":
       case "reinforce":
-        state = placeArmies(state, map, id, 1);
+        state = placeArmies(state!, map, id, 1);
         break;
       case "attack":
         if (owner === me) {
           target = null;
           if (selected === id) selected = null;
-          else if (state.territories[id]!.armies > 1) selected = id;
+          else if (state!.territories[id]!.armies > 1) selected = id;
           else addLog("⚠ Para atacar, o estado precisa de pelo menos 2 soldados");
-        } else if (selected && canAttack(state, map, selected, id)) {
+        } else if (selected && canAttack(state!, map, selected, id)) {
           target = target === id ? null : id;
+        } else if (selected) {
+          addLog("⚠ Só dá para atacar um estado que faz divisa");
         }
         break;
       case "fortify":
         if (owner !== me) break;
         if (selected && selected !== id && getTerritory(map, selected).neighbors.includes(id)) {
-          state = fortify(state, map, selected, id, 1);
+          state = fortify(state!, map, selected, id, 1);
           if (movableArmies(state, selected) === 0) selected = null;
         } else {
           selected = selected === id ? null : id;
@@ -195,48 +235,51 @@ function onTerritoryClick(id: TerritoryId) {
       default:
         break;
     }
-  } catch (error) {
-    addLog(`⚠ ${(error as Error).message}`);
-  }
-  render();
+  });
 }
 
-function doAttack(soldiers: number) {
-  if (!state || !selected || !target) return;
-  const game = state;
-  const from = selected;
-  const to = target;
-  const attacker = currentPlayer(game);
-  const defender = playerById(game, game.territories[to]!.owner);
-  withDiceRoll(() => {
-    const result = attack(game, map, from, to, Math.random, soldiers);
+function onRollAttack() {
+  withDiceRoll("attack", () => {
+    state = rollAttack(state!);
+  });
+}
+
+function onRollDefense() {
+  const game = state!;
+  const pending = game.battle!;
+  const attacker = playerById(game, pending.attacker);
+  const defender = playerById(game, pending.defender);
+  withDiceRoll("defense", () => {
+    const result = rollDefense(game);
     state = result.state;
     lastBattle = {
-      from,
-      to,
+      from: pending.from,
+      to: pending.to,
       attacker: attacker.id,
       defender: defender.id,
       battle: result.battle,
-      naval: result.naval,
       conquered: result.conquered,
     };
     const { attackerLosses, defenderLosses } = result.battle;
     addLog(
-      `${nameOf(attacker)}: ${sigla(from)} ${result.naval ? "⚓" : "⚔"} ${sigla(to)} com ${soldiers} — ataque perdeu ${attackerLosses}, defesa perdeu ${defenderLosses}` +
-        (result.conquered ? ` · ${stateName(to)} conquistado!` : ""),
+      `${nameOf(attacker)}: ${sigla(pending.from)} ⚔ ${sigla(pending.to)} com ${pending.soldiers} — ataque perdeu ${attackerLosses}, defesa perdeu ${defenderLosses}` +
+        (result.conquered ? ` · ${stateName(pending.to)} conquistado!` : ""),
     );
+    if (result.card) addLog(`🃏 ${nameOf(attacker)} ganhou a carta ${cardLabel(result.card)}`);
     if (result.eliminated) {
-      addLog(`☠ ${nameOf(defender)} foi eliminado por ${nameOf(attacker)}!`);
+      addLog(
+        `☠ ${nameOf(defender)} foi eliminado por ${nameOf(attacker)}, que ficou com as cartas dele!`,
+      );
     }
     // Mantém a seleção para atacar de novo, se ainda der.
-    const canContinue = state.territories[from]!.armies > 1;
+    const canContinue = state.territories[pending.from]!.armies > 1;
     if (result.conquered || !canContinue) target = null;
     if (!canContinue) selected = null;
   });
 }
 
 function rollOrder(players: string[]) {
-  withDiceRoll(() => {
+  withDiceRoll("order", () => {
     for (const id of players) state = rollForOrder(state!, map, id);
     if (state!.phase !== "order") {
       addLog(`Ordem de jogada: ${state!.players.map(nameOf).join(" → ")}`);
@@ -244,23 +287,41 @@ function rollOrder(players: string[]) {
   });
 }
 
+function onCardClick(id: string) {
+  if (!state || state.phase !== "reinforce" || rolling) return;
+  selectedCards = selectedCards.includes(id)
+    ? selectedCards.filter((c) => c !== id)
+    : [...selectedCards, id].slice(-3);
+  render();
+}
+
+function onTrade() {
+  act(() => {
+    const player = currentPlayer(state!);
+    const result = tradeCards(state!, selectedCards);
+    state = result.state;
+    selectedCards = [];
+    const bonus = result.bonusTerritories.length
+      ? ` e +${OWNED_CARD_BONUS} em ${result.bonusTerritories.map(sigla).join(", ")}`
+      : "";
+    addLog(`🃏 ${nameOf(player)} trocou cartas: +${result.armies} soldados${bonus}`);
+  });
+}
+
 // ---- mapa ----
 function renderBoard(game: GameState): string {
-  const targets = new Map<TerritoryId, number>();
-  if (selected && !target && game.phase === "attack") {
+  const targets = new Set<TerritoryId>();
+  if (selected && !target && game.phase === "attack" && !game.battle) {
     for (const t of map.territories) {
-      if (canAttack(game, map, selected, t.id)) {
-        targets.set(t.id, attackPenalty(map, selected, t.id)!);
-      }
+      if (canAttack(game, map, selected, t.id)) targets.add(t.id);
     }
   }
-  const fortifyTargets = new Set<TerritoryId>();
   if (selected && game.phase === "fortify" && movableArmies(game, selected) > 0) {
     for (const n of getTerritory(map, selected).neighbors) {
-      if (game.territories[n]?.owner === currentPlayer(game).id) fortifyTargets.add(n);
+      if (game.territories[n]?.owner === currentPlayer(game).id) targets.add(n);
     }
   }
-  const battle = rolling && lastBattle ? lastBattle : null;
+  const fighting = game.battle ?? (rolling === "defense" ? lastBattle : null);
   const placing = game.phase === "placement" || game.phase === "reinforce";
   const me = currentPlayer(game).id;
 
@@ -268,10 +329,9 @@ function renderBoard(game: GameState): string {
     .map((t) => {
       const ts = game.territories[t.id]!;
       const classes = ["state"];
-      if (selected === t.id || battle?.from === t.id) classes.push("selected");
-      if (target === t.id || battle?.to === t.id) classes.push("defending");
-      if (targets.has(t.id)) classes.push(targets.get(t.id)! > 0 ? "target-naval" : "target");
-      if (fortifyTargets.has(t.id)) classes.push("target");
+      if (selected === t.id || fighting?.from === t.id) classes.push("selected");
+      if (target === t.id || fighting?.to === t.id) classes.push("defending");
+      if (targets.has(t.id)) classes.push("target");
       if (placing && ts.owner !== me) classes.push("dim");
       return `<path class="${classes.join(" ")}" data-id="${t.id}" d="${STATE_PATHS[t.id]}" fill="${playerById(game, ts.owner).color}"><title>${t.name}</title></path>`;
     })
@@ -281,12 +341,8 @@ function renderBoard(game: GameState): string {
     .map((t) => {
       const { x, y, anchor } = LABELS[t.id]!;
       const ts = game.territories[t.id]!;
-      const penalty = targets.get(t.id);
       const leader = anchor
         ? `<line class="leader" x1="${anchor.x}" y1="${anchor.y}" x2="${x}" y2="${y}" /><circle class="anchor" cx="${anchor.x}" cy="${anchor.y}" r="2" />`
-        : "";
-      const penaltyTag = penalty
-        ? `<text class="penalty" x="${x + 15}" y="${y + 4}">−${penalty}</text>`
         : "";
       return `
         <g class="label" data-id="${t.id}">
@@ -295,7 +351,6 @@ function renderBoard(game: GameState): string {
           <circle class="badge" cx="${x}" cy="${y}" r="13" fill="${playerById(game, ts.owner).color}" />
           <text class="armies" x="${x}" y="${y + 4.5}">${ts.armies}</text>
           <text class="sigla" x="${x}" y="${y + 24}">${sigla(t.id)}</text>
-          ${penaltyTag}
         </g>`;
     })
     .join("");
@@ -317,47 +372,56 @@ function reserveFor(game: GameState, player: Player): number {
   return 0;
 }
 
+const diceRow = (values: number[], kind: "attack" | "defense", spin = false, lost?: boolean[]) =>
+  values.map((v, i) => dieHtml(v, kind, { rolling: spin, lost: lost?.[i] })).join("");
+
 function seatDice(game: GameState, player: Player): string {
-  // Na decisão da ordem (e na rodada inicial, para lembrar), cada um vê o próprio dado.
+  // Ordem de jogada (e, na rodada inicial, para lembrar): cada um vê o próprio dado.
   if (game.phase === "order" || game.phase === "placement") {
     const rolls = state!.orderRolls[player.id] ?? [];
     const before = frozen?.orderRolls[player.id]?.length ?? rolls.length;
     return rolls
       .map((v, i) =>
         dieHtml(v, "neutral", {
-          rolling: rolling && game.phase === "order" && i >= before,
+          rolling: rolling === "order" && i >= before,
           title: i ? "desempate" : "",
         }),
       )
       .join("");
   }
+
+  // Ataque em andamento: dados vermelhos com o atacante, amarelos com o defensor.
+  const pending = game.battle;
+  if (pending) {
+    if (player.id === pending.attacker) {
+      if (rolling === "attack") return diceRow(state!.battle!.attackRolls!, "attack", true);
+      return diceRow(pending.attackRolls ?? Array(pending.soldiers).fill(0), "attack");
+    }
+    if (player.id === pending.defender) {
+      if (rolling === "defense") return diceRow(lastBattle!.battle.defenseRolls, "defense", true);
+      return diceRow(Array(pending.defenseDice).fill(0), "defense");
+    }
+    return "";
+  }
+
+  // Resultado do último ataque: os dados que perderam ficam apagados.
   if (!lastBattle) return "";
   const { battle, attacker, defender } = lastBattle;
   const pairs = Math.min(battle.attackRolls.length, battle.defenseRolls.length);
-  const attackWon = (i: number) => battle.effectiveAttackRolls[i]! > battle.defenseRolls[i]!;
+  const attackWon = (i: number) => battle.attackRolls[i]! > battle.defenseRolls[i]!;
   if (player.id === attacker) {
-    return battle.attackRolls
-      .map((v, i) => {
-        const eff = battle.effectiveAttackRolls[i]!;
-        const die = dieHtml(eff, "attack", { rolling, lost: i < pairs && !attackWon(i) });
-        const note = eff !== v && !rolling ? `<small>${v}−${battle.attackPenalty}</small>` : "";
-        return `<span class="die-slot">${die}${note}</span>`;
-      })
-      .join("");
+    const lost = battle.attackRolls.map((_, i) => i < pairs && !attackWon(i));
+    return diceRow(battle.attackRolls, "attack", false, lost);
   }
   if (player.id === defender) {
-    return battle.defenseRolls
-      .map(
-        (v, i) =>
-          `<span class="die-slot">${dieHtml(v, "defense", { rolling, lost: i < pairs && attackWon(i) })}</span>`,
-      )
-      .join("");
+    const lost = battle.defenseRolls.map((_, i) => i < pairs && attackWon(i));
+    return diceRow(battle.defenseRolls, "defense", false, lost);
   }
   return "";
 }
 
-function seatBattleNote(player: Player): string {
-  if (!lastBattle || rolling) return "";
+function seatBattleNote(game: GameState, player: Player): string {
+  if (!lastBattle || rolling || game.battle) return "";
   const { battle, attacker, defender, conquered, to } = lastBattle;
   if (player.id === attacker) {
     return `<p class="note">Ataque perdeu ${battle.attackerLosses}${conquered ? ` · conquistou ${stateName(to)}!` : ""}</p>`;
@@ -368,11 +432,56 @@ function seatBattleNote(player: Player): string {
   return "";
 }
 
+function battleActions(game: GameState, player: Player): string | null {
+  const pending = game.battle;
+  if (!pending || rolling) return null;
+  const attacker = playerById(game, pending.attacker);
+  if (player.id === pending.attacker) {
+    if (!pending.attackRolls) {
+      return `<p class="note"><b>${stateName(pending.from)}</b> ⚔ <b>${stateName(pending.to)}</b> com ${pending.soldiers} soldado(s).<br/>Role seus dados vermelhos!</p>
+        <button class="primary roll-attack" id="roll-attack">🎲 Rolar ataque</button>
+        <button id="cancel-attack">Desistir</button>`;
+    }
+    return `<p class="note">Aguardando a defesa de ${nameOf(playerById(game, pending.defender))}…</p>`;
+  }
+  if (player.id === pending.defender) {
+    if (!pending.attackRolls) {
+      return `<p class="note">${nameOf(attacker)} vai atacar <b>${stateName(pending.to)}</b>…</p>`;
+    }
+    return `<p class="note">Você está sendo atacado em <b>${stateName(pending.to)}</b>!<br/>Role seus ${pending.defenseDice} dado(s) amarelo(s).</p>
+      <button class="primary roll-defense" id="roll-defense">🎲 Rolar defesa</button>`;
+  }
+  return null;
+}
+
+function reinforceActions(game: GameState, player: Player): string {
+  const hand = game.hands[player.id] ?? [];
+  const chosen = hand.filter((c) => selectedCards.includes(c.id));
+  const parts: string[] = [];
+  if (mustTrade(game)) {
+    parts.push(
+      `<p class="note warn">Você tem ${hand.length} cartas: é obrigatório trocar antes de posicionar.</p>`,
+    );
+  }
+  if (hasValidSet(hand)) {
+    const valid = isValidSet(chosen);
+    parts.push(`<p class="note">🃏 Troca disponível (+${tradeValue(game.trades)} soldados): toque em 3 cartas.</p>
+      <button class="primary" id="trade" ${valid ? "" : "disabled"}>Trocar cartas</button>`);
+  }
+  if (game.pendingReinforcements > 0) {
+    parts.push(
+      `<p class="note"><b>Reforço:</b> coloque ${game.pendingReinforcements} soldado(s) nos seus estados.</p>`,
+    );
+  } else if (!mustTrade(game)) {
+    parts.push(`<button id="skip-reinforce">Seguir para o ataque</button>`);
+  }
+  return parts.join("");
+}
+
 function seatActions(game: GameState, player: Player): string {
   if (game.phase === "order") {
-    const pending = playersToRollForOrder(game);
     if (rolling) return "";
-    if (pending.includes(player.id)) {
+    if (playersToRollForOrder(game).includes(player.id)) {
       const tie = (game.orderRolls[player.id]?.length ?? 0) > 0;
       return `${tie ? `<p class="note warn">Empate! Role de novo.</p>` : `<p class="note">Role o dado: quem tirar mais começa.</p>`}
         <button class="primary" data-roll="${player.id}">🎲 Rolar dado</button>`;
@@ -384,19 +493,21 @@ function seatActions(game: GameState, player: Player): string {
       ? `<p class="note big">🏆 Você venceu!</p><button id="new-game" class="primary">Nova partida</button>`
       : "";
   }
+  const battle = battleActions(game, player);
+  if (battle !== null) return battle;
   if (currentPlayer(game).id !== player.id || rolling) return "";
 
   switch (game.phase) {
     case "placement":
       return `<p class="note"><b>Rodada inicial:</b> coloque seus ${INITIAL_ARMIES} soldados tocando nos seus estados (pode dividir entre vários).</p>`;
     case "reinforce":
-      return `<p class="note"><b>Reforço:</b> coloque ${game.pendingReinforcements} soldado(s) nos seus estados.</p>`;
+      return reinforceActions(game, player);
     case "attack": {
       let step: string;
       if (!selected) {
         step = `<p class="note"><b>Ataque:</b> toque no estado de onde vai partir o ataque.</p>`;
       } else if (!target) {
-        step = `<p class="note">De <b>${stateName(selected)}</b>: agora toque no estado que vai receber o ataque.</p>`;
+        step = `<p class="note">De <b>${stateName(selected)}</b>: agora toque no estado vizinho que vai receber o ataque.</p>`;
       } else {
         const max = maxAttackers(game, selected);
         const buttons = Array.from(
@@ -404,8 +515,7 @@ function seatActions(game: GameState, player: Player): string {
           (_, i) =>
             `<button class="chip attack-count" data-attack="${i + 1}">${i + 1}<span>${pawnSvg(player.color).repeat(i + 1)}</span></button>`,
         ).join("");
-        const penalty = attackPenalty(map, selected, target)!;
-        step = `<p class="note"><b>${stateName(selected)}</b> → <b>${stateName(target)}</b>${penalty ? ` ⚓ −${penalty} nos dados` : ""}<br/>Atacar com quantos soldados?</p>
+        step = `<p class="note"><b>${stateName(selected)}</b> → <b>${stateName(target)}</b><br/>Atacar com quantos soldados?</p>
           <div class="chips">${buttons}</div>`;
       }
       return `${step}<button id="end-attack">Encerrar ataques</button>`;
@@ -418,6 +528,28 @@ function seatActions(game: GameState, player: Player): string {
   }
 }
 
+function seatHand(game: GameState, player: Player): string {
+  const hand = game.hands[player.id] ?? [];
+  if (hand.length === 0) return "";
+  const canPick = game.phase === "reinforce" && currentPlayer(game).id === player.id && !rolling;
+  const cards = hand
+    .map((c) => {
+      const owned = c.territory && game.territories[c.territory]?.owner === player.id;
+      const classes = ["tcard", `sym-${c.symbol}`];
+      if (owned) classes.push("owned");
+      if (canPick) classes.push("pickable");
+      if (canPick && selectedCards.includes(c.id)) classes.push("picked");
+      const title = `${c.territory ? stateName(c.territory) : "Coringa"} · ${SYMBOL_NAME[c.symbol]}${owned ? ` · seu estado: +${OWNED_CARD_BONUS} na troca` : ""}`;
+      return `<button class="${classes.join(" ")}" ${canPick ? `data-card="${c.id}"` : "disabled"} title="${title}">
+        <span class="sym">${SYMBOL_GLYPH[c.symbol]}</span>
+        <span class="cname">${c.territory ? sigla(c.territory) : "★"}</span>
+      </button>`;
+    })
+    .join("");
+  const warn = hand.length >= MAX_HAND ? " full" : "";
+  return `<div class="hand${warn}">${cards}</div>`;
+}
+
 function renderSeat(game: GameState, seat: Seat): string {
   const player = game.players.find((p) => seats[p.id] === seat);
   if (!player) return `<section class="seat seat-${seat} empty"></section>`;
@@ -425,11 +557,13 @@ function renderSeat(game: GameState, seat: Seat): string {
   const armies = owned.reduce((sum, id) => sum + game.territories[id]!.armies, 0);
   const isTurn =
     game.phase !== "order" && game.phase !== "finished" && currentPlayer(game).id === player.id;
+  const isDefending = game.battle?.defender === player.id;
   const out = owned.length === 0;
   const place =
     game.phase !== "order" ? `<span class="place">${game.players.indexOf(player) + 1}º</span>` : "";
   const classes = ["seat", `seat-${seat}`];
   if (isTurn || (game.phase === "finished" && game.winner === player.id)) classes.push("current");
+  if (isDefending) classes.push("defending");
   if (out) classes.push("out");
 
   return `
@@ -438,9 +572,10 @@ function renderSeat(game: GameState, seat: Seat): string {
         ${place}<span class="swatch"></span><b class="seat-name">${nameOf(player)}</b>
         <span class="muted">${out ? "eliminado" : `${owned.length} estados · ${armies} soldados`}</span>
       </div>
+      ${seatHand(game, player)}
       <div class="seat-body">
         <div class="seat-dice">${seatDice(game, player)}</div>
-        ${seatBattleNote(player)}
+        ${seatBattleNote(game, player)}
         <div class="seat-actions">${seatActions(game, player)}</div>
       </div>
       <div class="reserve">${reserveHtml(reserveFor(game, player), player.color)}</div>
@@ -450,6 +585,10 @@ function renderSeat(game: GameState, seat: Seat): string {
 // ---- centro: status, barra de ferramentas e menu ----
 function statusText(game: GameState): string {
   const who = nameOf(currentPlayer(game));
+  if (game.battle) {
+    const b = game.battle;
+    return `${nameOf(playerById(game, b.attacker))} ataca ${sigla(b.to)} de ${nameOf(playerById(game, b.defender))}`;
+  }
   switch (game.phase) {
     case "order":
       return "Quem começa? Cada jogador rola o dado no seu canto";
@@ -475,24 +614,27 @@ function toolbar(): string {
 }
 
 function renderMenu(): string {
-  if (!menuOpen) return "";
+  if (!menuOpen || !state) return "";
   const regions = map.regions
     .map((r) => `<li><span>${r.name}</span><b>+${r.bonus}</b></li>`)
     .join("");
   return `
-    <div class="overlay" id="overlay">
+    <div class="overlay">
       <section class="card menu">
         <h2>Regras rápidas</h2>
         <ol class="rules">
           <li>Os estados são sorteados; os dados decidem a ordem.</li>
           <li>Rodada inicial: cada um coloca ${INITIAL_ARMIES} soldados.</li>
-          <li>Ataque: escolha a origem, o alvo e com quantos soldados (até 3). O maior dado vence; empate é da defesa.</li>
-          <li>Por mar ⚓: litoral ataca litoral, com penalidade nos dados.</li>
+          <li>Ataque só a estados vizinhos (que fazem divisa): escolha a origem, o alvo e com quantos soldados (até 3).</li>
+          <li>O atacante rola os dados vermelhos e o defensor, os amarelos, cada um no seu canto. O maior vence; empate é da defesa.</li>
+          <li>Cada conquista vale uma carta (■ ▲ ● ou ★ coringa), visível para todos.</li>
+          <li>3 cartas iguais ou 3 diferentes valem uma troca por soldados (próxima: +${tradeValue(state.trades)}). Carta de estado seu: +${OWNED_CARD_BONUS} nele. Com ${MAX_HAND} cartas, a troca é obrigatória.</li>
           <li>A partir da rodada 2: 1 soldado a cada 2 estados + bônus de região.</li>
           <li>Vence o último jogador vivo.</li>
         </ol>
         <h3>Bônus por região</h3>
         <ul class="regions">${regions}</ul>
+        <p class="muted">Cartas no monte: ${state.deck.length} · trocadas: ${state.discard.length}</p>
         <h3>Histórico</h3>
         <ul class="log">${log.map((l) => `<li>${l}</li>`).join("") || "<li>—</li>"}</ul>
         <div class="menu-actions">
@@ -571,20 +713,34 @@ function bindEvents() {
   // jogo
   on("[data-roll]", (el) => rollOrder([el.dataset.roll!]));
   on("[data-id]", (el) => onTerritoryClick(el.dataset.id!));
-  on("[data-attack]", (el) => doAttack(Number(el.dataset.attack)));
-  on("#end-attack", () => {
-    selected = null;
-    target = null;
-    state = endAttackPhase(state!);
-    render();
-  });
-  on("#end-turn", () => {
-    selected = null;
-    target = null;
-    lastBattle = null;
-    state = endTurn(state!, map);
-    render();
-  });
+  on("[data-attack]", (el) =>
+    act(() => {
+      lastBattle = null;
+      state = declareAttack(state!, map, selected!, target!, Number(el.dataset.attack));
+    }),
+  );
+  on("#roll-attack", onRollAttack);
+  on("#roll-defense", onRollDefense);
+  on("#cancel-attack", () => act(() => (state = cancelAttack(state!))));
+  on("[data-card]", (el) => onCardClick(el.dataset.card!));
+  on("#trade", onTrade);
+  on("#skip-reinforce", () => act(() => (state = skipReinforce(state!))));
+  on("#end-attack", () =>
+    act(() => {
+      selected = null;
+      target = null;
+      state = endAttackPhase(state!);
+    }),
+  );
+  on("#end-turn", () =>
+    act(() => {
+      selected = null;
+      target = null;
+      selectedCards = [];
+      lastBattle = null;
+      state = endTurn(state!, map);
+    }),
+  );
   on("#new-game", () => {
     resetToSetup();
     render();

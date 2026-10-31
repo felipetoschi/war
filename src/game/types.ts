@@ -50,9 +50,40 @@ export interface TerritoryState {
  */
 export type Phase = "order" | "placement" | "reinforce" | "attack" | "fortify" | "finished";
 
+export type CardSymbol = "square" | "triangle" | "circle" | "joker";
+
+export interface Card {
+  id: string;
+  /** Estado da carta (null no coringa). */
+  territory: TerritoryId | null;
+  symbol: CardSymbol;
+}
+
+/** Ataque declarado: o atacante rola os dados vermelhos, depois o defensor os amarelos. */
+export interface PendingBattle {
+  from: TerritoryId;
+  to: TerritoryId;
+  attacker: PlayerId;
+  defender: PlayerId;
+  /** Soldados (dados) do ataque: 1 a 3. */
+  soldiers: number;
+  /** Dados da defesa: 1 por soldado no estado atacado, até 3. */
+  defenseDice: number;
+  /** Dados do ataque, depois que o atacante rolou. */
+  attackRolls: number[] | null;
+}
+
 export interface GameState {
   /** Jogadores na ordem de jogada (definida pelos dados na fase "order"). */
   players: Player[];
+  /** Cartas de cada jogador — visíveis para todos. */
+  hands: Record<PlayerId, Card[]>;
+  /** Monte de compra (já embaralhado) e cartas já trocadas. */
+  deck: Card[];
+  discard: Card[];
+  /** Quantas trocas já foram feitas na partida (o valor da troca cresce). */
+  trades: number;
+  battle: PendingBattle | null;
   territories: Partial<Record<TerritoryId, TerritoryState>>;
   /** Dados rolados por cada jogador para decidir a ordem (inclui desempates). */
   orderRolls: Partial<Record<PlayerId, number[]>>;

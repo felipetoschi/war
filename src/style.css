@@ -645,3 +645,114 @@ button.primary {
 .credits a {
   color: var(--muted);
 }
+
+/* ---- dado ainda não rolado ---- */
+.die3d.blank {
+  opacity: 0.55;
+  box-shadow:
+    inset 0 -5px 0 #0003,
+    0 0 0 2px #fff6 inset;
+}
+
+/* quem está sendo atacado também fica aceso (em amarelo) */
+.seat.defending {
+  border-color: var(--defense);
+  box-shadow: 0 0 22px var(--defense);
+}
+
+.roll-attack {
+  background: var(--attack);
+  color: #fff;
+  font-size: 1.1rem;
+  padding: 14px;
+}
+
+.roll-defense {
+  background: var(--defense);
+  color: #1a1a1a;
+  font-size: 1.1rem;
+  padding: 14px;
+}
+
+/* ---- cartas de troca (visíveis para todos) ---- */
+.hand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tcard {
+  width: 42px;
+  height: 56px;
+  padding: 4px 2px;
+  border-radius: 7px;
+  background: linear-gradient(160deg, #fbf7ea, #e2dac2);
+  color: #1a1a1a;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 3px 6px #0008;
+  border: 2px solid transparent;
+  font-weight: 800;
+  cursor: default;
+  position: relative;
+}
+
+.tcard:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.tcard .sym {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.tcard .cname {
+  font-size: 0.75rem;
+}
+
+.tcard.sym-square .sym {
+  color: #2f6fd6;
+}
+
+.tcard.sym-triangle .sym {
+  color: #1f9a52;
+}
+
+.tcard.sym-circle .sym {
+  color: #d63c31;
+}
+
+.tcard.sym-joker {
+  background: linear-gradient(160deg, #ffe58a, #e0b23a);
+}
+
+/* carta de um estado que o jogador domina: vale +2 nesse estado na troca */
+.tcard.owned::after {
+  content: "+2";
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  font-size: 0.65rem;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: var(--pc);
+  color: #fff;
+}
+
+.tcard.pickable {
+  cursor: pointer;
+}
+
+.tcard.picked {
+  border-color: var(--accent);
+  transform: translateY(-6px);
+}
+
+.hand.full .tcard {
+  box-shadow:
+    0 3px 6px #0008,
+    0 0 0 2px var(--accent);
+}

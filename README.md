@@ -6,8 +6,9 @@ no **mapa do Brasil** — 26 estados + Distrito Federal, agrupados nas 5 regiõe
 - De **2 a 4 jogadores**, cada um num canto do tablet (os de cima veem o seu canto virado para eles).
 - Os 27 estados são **sorteados**; depois, **dados** decidem a ordem de jogo.
 - Rodada inicial com **3 soldados** para cada; ataque escolhendo origem, alvo e quantos soldados.
-- **Dados como se fossem físicos** (vermelho ataca, amarelo defende) e **soldadinhos** na borda de cada jogador.
-- **Ataque naval ⚓:** litoral ataca litoral, com penalidade nos dados pela distância.
+- **Dados como se fossem físicos** (vermelho ataca, amarelo defende): cada jogador rola o seu, no seu canto.
+- **Cartas de troca** (■ ▲ ● e coringa ★), visíveis para todos: uma por conquista, trocadas por soldados.
+- **Soldadinhos** na borda de cada jogador. Só se ataca estado que faz divisa.
 - Reforço: 1 soldado a cada 2 estados, a partir da rodada 2. **Vence o último vivo.**
 
 📖 As regras completas, e o que ainda está em aberto, estão em [docs/REGRAS.md](docs/REGRAS.md).
@@ -32,10 +33,12 @@ src/
   game/          # motor do jogo: lógica pura, sem DOM, totalmente testada
     types.ts       # tipos do estado da partida
     brasil.ts      # estados, fronteiras, litoral e regiões
-    map.ts         # consultas ao mapa (vizinhança, distância no litoral)
-    dice.ts        # rolagem e comparação de dados (com penalidade)
+    map.ts         # consultas ao mapa (vizinhança)
+    cards.ts       # cartas de troca: baralho, trocas válidas e valor da troca
+    dice.ts        # rolagem e comparação de dados
     order.ts       # dados para decidir a ordem de jogada (com desempate)
-    rules.ts       # regras: sorteio dos estados, ordem de jogada, reforço, ataque (terra/mar), conquista,
+    rules.ts       # regras: sorteio dos estados, ordem de jogada, reforço, trocas, ataque em
+                   # 3 passos (declarar, rolar ataque, rolar defesa), conquista,
                    # remanejamento, turnos, vitória
   ui/
     brasil-svg.ts  # contornos dos estados e posição dos marcadores

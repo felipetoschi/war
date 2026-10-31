@@ -21,6 +21,7 @@ function pips(value: number): string {
 
 /**
  * HTML de um dado. Com `rolling`, ele chacoalha e troca de face até parar em `value`.
+ * `value` 0 desenha um dado ainda não rolado (sem pontos).
  * `lost` deixa o dado apagado (perdeu a comparação).
  */
 export function dieHtml(
@@ -31,6 +32,7 @@ export function dieHtml(
   const classes = ["die3d", kind, options.size ?? "lg"];
   if (options.rolling) classes.push("rolling");
   if (options.lost && !options.rolling) classes.push("lost");
+  if (value === 0 && !options.rolling) classes.push("blank");
   const shown = options.rolling ? 1 + Math.floor(Math.random() * 6) : value;
   const title = options.title ? ` title="${options.title}"` : "";
   return `<span class="${classes.join(" ")}" data-final="${value}"${title}>${pips(shown)}</span>`;

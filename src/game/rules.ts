@@ -1,7 +1,15 @@
+import {
+  createDeck,
+  hasValidSet,
+  isValidSet,
+  MAX_HAND,
+  OWNED_CARD_BONUS,
+  tradeValue,
+} from "./cards";
 import { compareRolls, rollDice, rollDie, type BattleResult } from "./dice";
-import { areNeighbors, coastDistance } from "./map";
+import { areNeighbors } from "./map";
 import { resolveOrder } from "./order";
-import type { GameMap, GameState, Player, PlayerId, Rng, TerritoryId } from "./types";
+import type { Card, GameMap, GameState, Player, PlayerId, Rng, TerritoryId } from "./types";
 
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 4;
@@ -11,16 +19,6 @@ export const MAX_DEFENSE_DICE = 3;
 export const INITIAL_ARMIES = 3;
 /** A cada quantos estados o jogador ganha 1 soldado no reforço. */
 export const TERRITORIES_PER_REINFORCEMENT = 2;
-
-/**
- * Penalidade do ataque naval, por distância no litoral (em estados costeiros):
- * 2–4 → −1 em cada dado, 5–8 → −2, 9 ou mais → −3.
- */
-export function navalPenalty(distance: number): number {
-  if (distance <= 4) return 1;
-  if (distance <= 8) return 2;
-  return 3;
-}
 
 function shuffle<T>(items: T[], rng: Rng): T[] {
   const copy = [...items];
@@ -33,7 +31,8 @@ function shuffle<T>(items: T[], rng: Rng): T[] {
 
 /**
  * Cria uma partida: os 27 estados são sorteados entre os jogadores (1 soldado em cada),
- * o mais igualmente possível. Em seguida, os dados decidem a ordem de jogada (`rollForOrder`).
+ * o mais igualmente possível, e o baralho de cartas é embaralhado.
+ * Em seguida, os dados decidem a ordem de jogada (`rollForOrder`).
  */
 export function createGame(map: GameMap, players: Player[], rng: Rng = Math.random): GameState {
   if (players.length < MIN_PLAYERS || players.length > MAX_PLAYERS) {
@@ -47,6 +46,11 @@ export function createGame(map: GameMap, players: Player[], rng: Rng = Math.rand
   });
   return {
     players,
+    hands: Object.fromEntries(players.map((p) => [p.id, []])),
+    deck: shuffle(createDeck(map), rng),
+    discard: [],
+    trades: 0,
+    battle: null,
     territories,
     orderRolls: {},
     currentPlayerIndex: 0,
@@ -57,6 +61,8 @@ export function createGame(map: GameMap, players: Player[], rng: Rng = Math.rand
     winner: null,
   };
 }
+
+// ---- ordem de jogada ----
 
 /** Jogadores que ainda precisam rolar o dado para decidir a ordem. */
 export function playersToRollForOrder(state: GameState): PlayerId[] {
@@ -96,6 +102,8 @@ export function rollForOrder(
   return next;
 }
 
+// ---- consultas ----
+
 export function currentPlayer(state: GameState): Player {
   return state.players[state.currentPlayerIndex]!;
 }
@@ -130,6 +138,7 @@ export function reinforcementsFor(state: GameState, map: GameMap, player: Player
 
 function assertPhase(state: GameState, ...phases: GameState["phase"][]): void {
   if (!phases.includes(state.phase)) throw new Error(`Ação inválida na fase "${state.phase}"`);
+  if (state.battle) throw new Error("Termine o ataque em andamento (rolar os dados)");
 }
 
 function assertOwnedByCurrent(state: GameState, id: TerritoryId): void {
@@ -140,17 +149,24 @@ function assertOwnedByCurrent(state: GameState, id: TerritoryId): void {
   }
 }
 
+// ---- turnos e reforço ----
+
 /**
  * Começa o turno de um jogador. Na rodada 1 não há reforço (vai direto ao ataque);
- * a partir da rodada 2, começa pelo reforço.
+ * a partir da rodada 2, começa pelo reforço (e pela troca de cartas, se houver).
  */
 function startTurn(state: GameState, map: GameMap, index: number): GameState {
+  const player = state.players[index]!.id;
   state.currentPlayerIndex = index;
   state.fortified = {};
-  state.pendingReinforcements =
-    state.round >= 2 ? reinforcementsFor(state, map, state.players[index]!.id) : 0;
-  state.phase = state.pendingReinforcements > 0 ? "reinforce" : "attack";
+  state.pendingReinforcements = state.round >= 2 ? reinforcementsFor(state, map, player) : 0;
+  const canTrade = state.round >= 2 && hasValidSet(state.hands[player] ?? []);
+  state.phase = state.pendingReinforcements > 0 || canTrade ? "reinforce" : "attack";
   return state;
+}
+
+export function mustTrade(state: GameState): boolean {
+  return (state.hands[currentPlayer(state).id]?.length ?? 0) >= MAX_HAND;
 }
 
 /** Posiciona soldados na rodada inicial ou no reforço do turno. */
@@ -162,6 +178,9 @@ export function placeArmies(
 ): GameState {
   assertPhase(state, "placement", "reinforce");
   assertOwnedByCurrent(state, territory);
+  if (state.phase === "reinforce" && mustTrade(state)) {
+    throw new Error(`Com ${MAX_HAND} cartas ou mais, é obrigatório trocar antes`);
+  }
   if (!Number.isInteger(amount) || amount < 1 || amount > state.pendingReinforcements) {
     throw new Error("Quantidade de soldados inválida");
   }
@@ -185,18 +204,52 @@ export function placeArmies(
   return startTurn(next, map, 0);
 }
 
-/**
- * Penalidade nos dados para atacar `to` a partir de `from`:
- * 0 por terra (fronteira), 1–3 por mar (dois estados litorâneos sem fronteira),
- * ou null se não há rota de ataque.
- */
-export function attackPenalty(map: GameMap, from: TerritoryId, to: TerritoryId): number | null {
-  if (from === to) return null;
-  if (areNeighbors(map, from, to)) return 0;
-  const distance = coastDistance(map, from, to);
-  return distance === null ? null : navalPenalty(distance);
+/** Sem soldados a posicionar, o jogador pode dispensar a troca e ir para o ataque. */
+export function skipReinforce(state: GameState): GameState {
+  assertPhase(state, "reinforce");
+  if (state.pendingReinforcements > 0) throw new Error("Posicione todos os soldados antes");
+  if (mustTrade(state)) throw new Error(`Com ${MAX_HAND} cartas ou mais, é obrigatório trocar`);
+  return { ...state, phase: "attack" };
 }
 
+export interface TradeOutcome {
+  state: GameState;
+  armies: number;
+  /** Estados do jogador que estavam nas cartas e receberam +2 soldados. */
+  bonusTerritories: TerritoryId[];
+}
+
+/**
+ * Troca 3 cartas por soldados (no reforço). Cartas de estados que o jogador domina
+ * dão +2 soldados direto nesses estados.
+ */
+export function tradeCards(state: GameState, cardIds: string[]): TradeOutcome {
+  assertPhase(state, "reinforce");
+  const player = currentPlayer(state).id;
+  const hand = state.hands[player] ?? [];
+  const cards = cardIds.map((id) => hand.find((c) => c.id === id));
+  if (new Set(cardIds).size !== 3 || cards.some((c) => !c)) {
+    throw new Error("Escolha 3 cartas suas");
+  }
+  if (!isValidSet(cards as Card[])) {
+    throw new Error("Troca inválida: 3 símbolos iguais ou 3 diferentes (coringa vale qualquer)");
+  }
+  const next = structuredClone(state);
+  const armies = tradeValue(state.trades);
+  next.trades++;
+  next.pendingReinforcements += armies;
+  next.hands[player] = hand.filter((c) => !cardIds.includes(c.id));
+  next.discard.push(...(cards as Card[]));
+  const bonusTerritories = (cards as Card[])
+    .map((c) => c.territory)
+    .filter((t): t is TerritoryId => t !== null && next.territories[t]?.owner === player);
+  for (const t of bonusTerritories) next.territories[t]!.armies += OWNED_CARD_BONUS;
+  return { state: next, armies, bonusTerritories };
+}
+
+// ---- ataque ----
+
+/** Só dá para atacar estados que fazem divisa (fronteira terrestre). */
 export function canAttack(
   state: GameState,
   map: GameMap,
@@ -205,12 +258,12 @@ export function canAttack(
 ): boolean {
   const source = state.territories[from];
   const target = state.territories[to];
-  if (state.phase !== "attack" || !source || !target) return false;
+  if (state.phase !== "attack" || state.battle || !source || !target) return false;
   return (
     source.owner === currentPlayer(state).id &&
     target.owner !== source.owner &&
     source.armies > 1 &&
-    attackPenalty(map, from, to) !== null
+    areNeighbors(map, from, to)
   );
 }
 
@@ -219,21 +272,117 @@ export function maxAttackers(state: GameState, from: TerritoryId): number {
   return Math.min(MAX_ATTACK_DICE, (state.territories[from]?.armies ?? 0) - 1);
 }
 
+/**
+ * 1º passo do ataque: escolhe origem, alvo e com quantos soldados (1 a 3, deixando 1).
+ * Depois o atacante rola (`rollAttack`) e o defensor rola (`rollDefense`).
+ */
+export function declareAttack(
+  state: GameState,
+  map: GameMap,
+  from: TerritoryId,
+  to: TerritoryId,
+  soldiers: number,
+): GameState {
+  if (!canAttack(state, map, from, to)) throw new Error("Ataque inválido");
+  const max = maxAttackers(state, from);
+  if (!Number.isInteger(soldiers) || soldiers < 1 || soldiers > max) {
+    throw new Error(`Ataque com 1 a ${max} soldados`);
+  }
+  const target = state.territories[to]!;
+  return {
+    ...state,
+    battle: {
+      from,
+      to,
+      attacker: currentPlayer(state).id,
+      defender: target.owner,
+      soldiers,
+      defenseDice: Math.min(MAX_DEFENSE_DICE, target.armies),
+      attackRolls: null,
+    },
+  };
+}
+
+/** Desiste do ataque declarado, antes de o atacante rolar. */
+export function cancelAttack(state: GameState): GameState {
+  if (!state.battle) throw new Error("Não há ataque em andamento");
+  if (state.battle.attackRolls) throw new Error("O ataque já foi rolado");
+  return { ...state, battle: null };
+}
+
+/** 2º passo: o atacante rola os dados vermelhos. */
+export function rollAttack(state: GameState, rng: Rng = Math.random): GameState {
+  const battle = state.battle;
+  if (!battle) throw new Error("Não há ataque em andamento");
+  if (battle.attackRolls) throw new Error("O ataque já foi rolado");
+  return { ...state, battle: { ...battle, attackRolls: rollDice(battle.soldiers, rng) } };
+}
+
 export interface AttackOutcome {
   state: GameState;
   battle: BattleResult;
   conquered: boolean;
-  naval: boolean;
   /** Dono anterior, se foi eliminado com esta conquista. */
   eliminated: PlayerId | null;
+  /** Carta ganha pela conquista (null se o monte acabou). */
+  card: Card | null;
+}
+
+/** Compra uma carta para o jogador; se o monte acabar, as cartas trocadas voltam embaralhadas. */
+function drawCard(state: GameState, player: PlayerId, rng: Rng): Card | null {
+  if (state.deck.length === 0 && state.discard.length > 0) {
+    state.deck = shuffle(state.discard, rng);
+    state.discard = [];
+  }
+  const card = state.deck.shift() ?? null;
+  if (card) state.hands[player] = [...(state.hands[player] ?? []), card];
+  return card;
 }
 
 /**
- * Um ataque com `soldiers` soldados (1 a 3, sempre deixando 1 na origem): cada soldado
- * é um dado. O defensor rola um dado por soldado, até 3. O maior vence; empate é da defesa.
- * Ataques navais sofrem penalidade nos dados do atacante.
- * Se conquistar, os soldados que atacaram e sobreviveram ocupam o estado.
+ * 3º passo: o defensor rola os dados amarelos e o combate é resolvido.
+ * O maior dado vence; empate é da defesa. Ao conquistar, os soldados que atacaram e
+ * sobreviveram ocupam o estado, e o atacante ganha uma carta.
  */
+export function rollDefense(state: GameState, rng: Rng = Math.random): AttackOutcome {
+  const pending = state.battle;
+  if (!pending?.attackRolls) throw new Error("O atacante precisa rolar primeiro");
+  const next = structuredClone(state);
+  next.battle = null;
+  const source = next.territories[pending.from]!;
+  const target = next.territories[pending.to]!;
+
+  const battle = compareRolls(pending.attackRolls, rollDice(pending.defenseDice, rng));
+  source.armies -= battle.attackerLosses;
+  target.armies -= battle.defenderLosses;
+
+  const conquered = target.armies === 0;
+  let eliminated: PlayerId | null = null;
+  let card: Card | null = null;
+  if (conquered) {
+    const survivors = pending.soldiers - battle.attackerLosses;
+    target.owner = pending.attacker;
+    target.armies = survivors;
+    source.armies -= survivors;
+    card = drawCard(next, pending.attacker, rng);
+    if (territoriesOf(next, pending.defender).length === 0) {
+      eliminated = pending.defender;
+      // Quem elimina um jogador fica com as cartas dele.
+      next.hands[pending.attacker] = [
+        ...(next.hands[pending.attacker] ?? []),
+        ...(next.hands[pending.defender] ?? []),
+      ];
+      next.hands[pending.defender] = [];
+    }
+    if (alivePlayers(next).length === 1) {
+      next.winner = pending.attacker;
+      next.phase = "finished";
+    }
+  }
+  return { state: next, battle, conquered, eliminated, card };
+}
+
+/** Ataque completo de uma vez (declara, rola ataque e defesa). Útil para testes. */
 export function attack(
   state: GameState,
   map: GameMap,
@@ -242,42 +391,15 @@ export function attack(
   rng: Rng = Math.random,
   soldiers: number = maxAttackers(state, from),
 ): AttackOutcome {
-  if (!canAttack(state, map, from, to)) throw new Error("Ataque inválido");
-  if (!Number.isInteger(soldiers) || soldiers < 1 || soldiers > maxAttackers(state, from)) {
-    throw new Error(`Ataque com 1 a ${maxAttackers(state, from)} soldados`);
-  }
-  const penalty = attackPenalty(map, from, to)!;
-  const next = structuredClone(state);
-  const source = next.territories[from]!;
-  const target = next.territories[to]!;
-  const defender = target.owner;
-
-  const defenseDice = Math.min(MAX_DEFENSE_DICE, target.armies);
-  const battle = compareRolls(rollDice(soldiers, rng), rollDice(defenseDice, rng), penalty);
-
-  source.armies -= battle.attackerLosses;
-  target.armies -= battle.defenderLosses;
-
-  const conquered = target.armies === 0;
-  let eliminated: PlayerId | null = null;
-  if (conquered) {
-    const survivors = soldiers - battle.attackerLosses;
-    target.owner = source.owner;
-    target.armies = survivors;
-    source.armies -= survivors;
-    if (territoriesOf(next, defender).length === 0) eliminated = defender;
-    if (alivePlayers(next).length === 1) {
-      next.winner = source.owner;
-      next.phase = "finished";
-    }
-  }
-  return { state: next, battle, conquered, naval: penalty > 0, eliminated };
+  return rollDefense(rollAttack(declareAttack(state, map, from, to, soldiers), rng), rng);
 }
 
 export function endAttackPhase(state: GameState): GameState {
   assertPhase(state, "attack");
   return { ...state, phase: "fortify" };
 }
+
+// ---- remanejamento ----
 
 /** Soldados de um estado que ainda podem ser remanejados neste turno. */
 export function movableArmies(state: GameState, territory: TerritoryId): number {

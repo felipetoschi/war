@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 import { BRASIL_MAP } from "./brasil";
 import {
   attack,
-  attackPenalty,
   canAttack,
+  cancelAttack,
+  declareAttack,
+  rollAttack,
+  rollDefense,
+  skipReinforce,
+  tradeCards,
   createGame,
   endAttackPhase,
   endTurn,
@@ -11,14 +16,14 @@ import {
   INITIAL_ARMIES,
   maxAttackers,
   movableArmies,
-  navalPenalty,
   placeArmies,
   playersToRollForOrder,
   rollForOrder,
   reinforcementsFor,
   territoriesOf,
 } from "./rules";
-import type { GameState, Player } from "./types";
+import { createDeck, isValidSet, tradeValue } from "./cards";
+import type { Card, GameState, Player } from "./types";
 
 const map = BRASIL_MAP;
 const players: Player[] = [
@@ -148,24 +153,139 @@ describe("reforço: 1 soldado a cada 2 estados", () => {
   });
 });
 
-describe("ataque naval", () => {
-  it("penalidade cresce com a distância no litoral", () => {
-    expect([2, 4, 5, 8, 9].map(navalPenalty)).toEqual([1, 1, 2, 2, 3]);
+describe("só ataca quem faz divisa", () => {
+  it("não existe mais ataque pelo mar entre estados sem divisa", () => {
+    const state = stateWith({ rn: 4, rj: 4 });
+    expect(canAttack(state, map, "rn", "ce")).toBe(true); // vizinhos
+    expect(canAttack(state, map, "rn", "rs")).toBe(false); // litoral, mas sem divisa
+    expect(canAttack(state, map, "rj", "pr")).toBe(false);
+  });
+});
+
+describe("dados manuais: atacante rola, depois defensor", () => {
+  it("declara, rola o ataque e depois a defesa", () => {
+    let state = declareAttack(stateWith({ sp: 5 }), map, "sp", "mg", 2);
+    expect(state.battle).toMatchObject({ soldiers: 2, defenseDice: 1, attackRolls: null });
+    expect(() => rollDefense(state)).toThrow(); // defensor não rola antes do atacante
+    expect(() => endAttackPhase(state)).toThrow(); // ataque em andamento
+    state = rollAttack(state, seq(0.99, 0.99));
+    expect(state.battle!.attackRolls).toEqual([6, 6]);
+    expect(() => cancelAttack(state)).toThrow(); // depois de rolar, não dá para desistir
+    const result = rollDefense(state, seq(0));
+    expect(result.battle.defenseRolls).toEqual([1]);
+    expect(result.conquered).toBe(true);
+    expect(result.state.battle).toBeNull();
   });
 
-  it("calcula a rota: terra sem penalidade, mar com penalidade, interior sem rota", () => {
-    expect(attackPenalty(map, "sp", "mg")).toBe(0);
-    expect(attackPenalty(map, "rj", "pr")).toBe(1);
-    expect(attackPenalty(map, "rn", "rs")).toBe(3);
-    expect(attackPenalty(map, "rs", "rn")).toBe(3);
-    expect(attackPenalty(map, "sp", "go")).toBeNull();
+  it("dá para desistir antes de rolar o ataque", () => {
+    const state = declareAttack(stateWith({ sp: 5 }), map, "sp", "mg", 3);
+    expect(cancelAttack(state).battle).toBeNull();
+  });
+});
+
+describe("cartas de troca", () => {
+  const card = (id: string, symbol: Card["symbol"], territory: string | null = id): Card => ({
+    id,
+    territory,
+    symbol,
   });
 
-  it("aplica a penalidade nos dados de um ataque naval", () => {
-    const result = attack(stateWith({ rn: 4 }), map, "rn", "rs", seq(0.99, 0.99, 0.99, 0.4));
-    expect(result.naval).toBe(true);
-    expect(result.battle.effectiveAttackRolls).toEqual([3, 3, 3]);
-    expect(result.conquered).toBe(false);
+  it("baralho tem 27 estados (9 de cada símbolo) e 2 coringas", () => {
+    const deck = createDeck(map);
+    expect(deck).toHaveLength(29);
+    for (const s of ["square", "triangle", "circle"] as const) {
+      expect(deck.filter((c) => c.symbol === s)).toHaveLength(9);
+    }
+    expect(deck.filter((c) => c.symbol === "joker")).toHaveLength(2);
+  });
+
+  it("troca válida: 3 iguais, 3 diferentes, ou com coringa", () => {
+    expect(isValidSet([card("a", "square"), card("b", "square"), card("c", "square")])).toBe(true);
+    expect(isValidSet([card("a", "square"), card("b", "triangle"), card("c", "circle")])).toBe(
+      true,
+    );
+    expect(isValidSet([card("a", "square"), card("b", "square"), card("c", "circle")])).toBe(false);
+    expect(isValidSet([card("a", "square"), card("b", "square"), card("j", "joker", null)])).toBe(
+      true,
+    );
+  });
+
+  it("valor da troca cresce: 4, 6, 8, 10, 12, 15, 20…", () => {
+    expect([0, 1, 2, 3, 4, 5, 6, 7].map(tradeValue)).toEqual([4, 6, 8, 10, 12, 15, 20, 25]);
+  });
+
+  it("quem conquista um estado ganha uma carta, visível no estado da partida", () => {
+    const result = attack(stateWith({ sp: 5 }), map, "sp", "mg", seq(0.99, 0.99, 0.99, 0), 3);
+    expect(result.conquered).toBe(true);
+    expect(result.card).not.toBeNull();
+    expect(result.state.hands.a).toHaveLength(1);
+    expect(result.state.deck).toHaveLength(28);
+  });
+
+  it("troca dá soldados e +2 em cada estado das cartas que o jogador domina", () => {
+    const state: GameState = {
+      ...stateWith({ sp: 1, mg: 1 }, "reinforce"),
+      pendingReinforcements: 0,
+      hands: {
+        a: [card("sp", "square"), card("ba", "triangle"), card("mg", "circle")],
+        b: [],
+      },
+    };
+    const { state: next, armies, bonusTerritories } = tradeCards(state, ["sp", "ba", "mg"]);
+    expect(armies).toBe(4);
+    expect(next.pendingReinforcements).toBe(4);
+    expect(bonusTerritories.sort()).toEqual(["mg", "sp"]);
+    expect(next.territories.sp!.armies).toBe(3);
+    expect(next.territories.ba!.armies).toBe(1); // BA é do outro jogador: sem bônus
+    expect(next.hands.a).toHaveLength(0);
+    expect(next.discard).toHaveLength(3);
+    expect(next.trades).toBe(1);
+  });
+
+  it("recusa trocas inválidas", () => {
+    const state: GameState = {
+      ...stateWith({ sp: 1 }, "reinforce"),
+      hands: { a: [card("sp", "square"), card("ba", "square"), card("mg", "circle")], b: [] },
+    };
+    expect(() => tradeCards(state, ["sp", "ba", "mg"])).toThrow();
+  });
+
+  it("com 5 cartas ou mais, é obrigatório trocar antes de posicionar", () => {
+    const hand = ["sp", "ba", "mg", "rj", "es"].map((id) => card(id, "square"));
+    const state: GameState = {
+      ...stateWith({ sp: 1 }, "reinforce"),
+      pendingReinforcements: 3,
+      hands: { a: hand, b: [] },
+    };
+    expect(() => placeArmies(state, map, "sp", 1)).toThrow();
+    const traded = tradeCards(state, ["sp", "ba", "mg"]).state;
+    expect(() => placeArmies(traded, map, "sp", 1)).not.toThrow();
+  });
+
+  it("com uma troca possível, o reforço espera; sem soldados, pode seguir sem trocar", () => {
+    const hand = [card("sp", "square"), card("ba", "square"), card("mg", "square")];
+    const roundOneEnd: GameState = {
+      ...stateWith({ ac: 1 }),
+      currentPlayerIndex: 1,
+      hands: { a: hand, b: [] },
+    };
+    const next = endTurn(roundOneEnd, map); // rodada 2, "a" com 1 estado: 0 de reforço
+    expect(next.phase).toBe("reinforce");
+    expect(next.pendingReinforcements).toBe(0);
+    expect(skipReinforce(next).phase).toBe("attack");
+  });
+
+  it("quem elimina um jogador fica com as cartas dele", () => {
+    const owned = Object.fromEntries(map.territories.map((t) => [t.id, 1]));
+    delete owned.mg;
+    owned.sp = 3;
+    const state: GameState = {
+      ...stateWith(owned),
+      hands: { a: [], b: [card("ba", "circle"), card("rj", "square")] },
+    };
+    const result = attack(state, map, "sp", "mg", seq(0.99, 0.99, 0));
+    expect(result.eliminated).toBe("b");
+    expect(result.state.hands.a).toHaveLength(3); // 2 do eliminado + 1 da conquista
   });
 });
 
