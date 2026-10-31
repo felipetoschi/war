@@ -1,0 +1,24 @@
+name: ✨ Ideia / funcionalidade
+description: Sugira uma regra, melhoria ou nova funcionalidade
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Qual é a ideia?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Por que isso melhora o jogo?
+  - type: dropdown
+    id: area
+    attributes:
+      label: Área
+      options:
+        - Regras do jogo
+        - Mapa
+        - Interface
+        - Multijogador / IA
+        - Infraestrutura
