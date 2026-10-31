@@ -1,38 +1,43 @@
 import { describe, expect, it } from "vitest";
-import { AURORA_MAP } from "./map";
+import { BRASIL_MAP } from "./brasil";
+import { OBJECTIVES } from "./objectives";
 import {
   attack,
+  attackPenalty,
   canAttack,
   createGame,
   endAttackPhase,
   endTurn,
   fortify,
+  navalPenalty,
   placeArmies,
   reinforcementsFor,
   territoriesOf,
 } from "./rules";
-import type { GameState, Player } from "./types";
+import type { GameState, Objective, Player } from "./types";
 
 const players: Player[] = [
   { id: "a", name: "Ana", color: "#c0392b" },
   { id: "b", name: "Beto", color: "#2471a3" },
 ];
 
-/** RNG determinístico que repete a sequência informada. */
 const seq = (...values: number[]) => {
   let i = 0;
   return () => values[i++ % values.length]!;
 };
 
-/** Estado de teste: "b" tem tudo, exceto os territórios dados ao "a". */
+const objective = (id: string): Objective => OBJECTIVES.find((o) => o.id === id)!;
+
+/** Estado de teste: "a" tem os estados informados, "b" tem o resto (1 exército cada). */
 function stateWith(owned: Record<string, number>, phase: GameState["phase"] = "attack"): GameState {
   const territories: GameState["territories"] = {};
-  for (const t of AURORA_MAP.territories) {
+  for (const t of BRASIL_MAP.territories) {
     territories[t.id] =
       t.id in owned ? { owner: "a", armies: owned[t.id]! } : { owner: "b", armies: 1 };
   }
   return {
     players,
+    objectives: { a: objective("18-estados"), b: objective("18-estados") },
     territories,
     currentPlayerIndex: 0,
     phase,
@@ -43,90 +48,125 @@ function stateWith(owned: Record<string, number>, phase: GameState["phase"] = "a
 }
 
 describe("createGame", () => {
-  it("distribui todos os territórios de forma equilibrada", () => {
-    const game = createGame(AURORA_MAP, players, seq(0.3, 0.7, 0.1));
-    expect(Object.keys(game.territories)).toHaveLength(AURORA_MAP.territories.length);
-    expect(territoriesOf(game, "a")).toHaveLength(10);
-    expect(territoriesOf(game, "b")).toHaveLength(10);
-    expect(game.phase).toBe("reinforce");
-    expect(game.pendingReinforcements).toBeGreaterThanOrEqual(3);
+  it("distribui os 27 estados e dá um objetivo diferente para cada jogador", () => {
+    const five = [1, 2, 3, 4, 5].map((n) => ({ id: `p${n}`, name: `P${n}`, color: "#000" }));
+    const game = createGame(BRASIL_MAP, five, seq(0.3, 0.7, 0.1, 0.9, 0.5));
+    expect(Object.keys(game.territories)).toHaveLength(27);
+    for (const p of five) expect(territoriesOf(game, p.id).length).toBeGreaterThanOrEqual(5);
+    const objectiveIds = Object.values(game.objectives).map((o) => o.id);
+    expect(new Set(objectiveIds).size).toBe(5);
   });
 
-  it("exige pelo menos 2 jogadores", () => {
-    expect(() => createGame(AURORA_MAP, [players[0]!])).toThrow();
+  it("aceita de 2 a 5 jogadores", () => {
+    const many = [1, 2, 3, 4, 5, 6].map((n) => ({ id: `p${n}`, name: `P${n}`, color: "#000" }));
+    expect(() => createGame(BRASIL_MAP, many.slice(0, 1))).toThrow();
+    expect(() => createGame(BRASIL_MAP, many)).toThrow();
   });
 });
 
 describe("reinforcementsFor", () => {
   it("dá no mínimo 3 exércitos", () => {
-    expect(reinforcementsFor(stateWith({ geleira: 1 }), AURORA_MAP, "a")).toBe(3);
+    expect(reinforcementsFor(stateWith({ ac: 1 }), BRASIL_MAP, "a")).toBe(3);
   });
 
-  it("soma o bônus de continente", () => {
-    const boreal = { geleira: 1, fiorde: 1, taiga: 1, aurora: 1, planalto: 1 };
-    expect(reinforcementsFor(stateWith(boreal), AURORA_MAP, "a")).toBe(3 + 4);
+  it("soma o bônus da região", () => {
+    expect(reinforcementsFor(stateWith({ pr: 1, sc: 1, rs: 1 }), BRASIL_MAP, "a")).toBe(3 + 2);
   });
 });
 
-describe("placeArmies", () => {
-  it("passa para a fase de ataque ao terminar os reforços", () => {
-    const state = { ...stateWith({ geleira: 1 }, "reinforce"), pendingReinforcements: 3 };
-    const next = placeArmies(state, "geleira", 3);
-    expect(next.territories.geleira!.armies).toBe(4);
-    expect(next.phase).toBe("attack");
+describe("ataque naval", () => {
+  it("penalidade cresce com a distância no litoral", () => {
+    expect(navalPenalty(2)).toBe(1);
+    expect(navalPenalty(4)).toBe(1);
+    expect(navalPenalty(5)).toBe(2);
+    expect(navalPenalty(8)).toBe(2);
+    expect(navalPenalty(9)).toBe(3);
   });
 
-  it("não deixa posicionar em território inimigo", () => {
-    const state = { ...stateWith({ geleira: 1 }, "reinforce"), pendingReinforcements: 3 };
-    expect(() => placeArmies(state, "fiorde", 1)).toThrow();
+  it("calcula a rota: terra sem penalidade, mar com penalidade, interior sem rota", () => {
+    expect(attackPenalty(BRASIL_MAP, "sp", "mg")).toBe(0);
+    expect(attackPenalty(BRASIL_MAP, "rj", "pr")).toBe(1); // distância 2
+    expect(attackPenalty(BRASIL_MAP, "rn", "rs")).toBe(3); // distância 11
+    expect(attackPenalty(BRASIL_MAP, "rs", "rn")).toBe(3); // e vice-versa
+    expect(attackPenalty(BRASIL_MAP, "ba", "rs")).toBe(2); // distância 6
+    expect(attackPenalty(BRASIL_MAP, "sp", "go")).toBeNull(); // GO não tem litoral
+    expect(attackPenalty(BRASIL_MAP, "mg", "rs")).toBeNull(); // MG não tem litoral
+  });
+
+  it("permite atacar pelo mar estados litorâneos sem fronteira", () => {
+    const state = stateWith({ rn: 4 });
+    expect(canAttack(state, BRASIL_MAP, "rn", "rs")).toBe(true);
+    expect(canAttack(state, BRASIL_MAP, "rn", "go")).toBe(false);
+  });
+
+  it("aplica a penalidade nos dados de um ataque naval", () => {
+    // RN -> RS (−3): ataque rola 6, 6, 6 → 3, 3, 3; defesa rola 3 → empate, defesa vence
+    const result = attack(stateWith({ rn: 4 }), BRASIL_MAP, "rn", "rs", seq(0.99, 0.99, 0.99, 0.4));
+    expect(result.naval).toBe(true);
+    expect(result.battle.effectiveAttackRolls).toEqual([3, 3, 3]);
+    expect(result.conquered).toBe(false);
+    expect(result.state.territories.rn!.armies).toBe(3);
   });
 });
 
 describe("attack", () => {
-  it("só permite atacar vizinhos inimigos com mais de 1 exército", () => {
-    const state = stateWith({ geleira: 3, oasis: 1 });
-    expect(canAttack(state, AURORA_MAP, "geleira", "fiorde")).toBe(true);
-    expect(canAttack(state, AURORA_MAP, "geleira", "salina")).toBe(false);
-    expect(canAttack(state, AURORA_MAP, "oasis", "salina")).toBe(false);
-  });
-
-  it("conquista o território e move os exércitos atacantes", () => {
-    // ataque com 2 dados (6, 6) contra 1 dado (1)
-    const result = attack(
-      stateWith({ geleira: 3 }),
-      AURORA_MAP,
-      "geleira",
-      "fiorde",
-      seq(0.99, 0.99, 0),
-    );
+  it("conquista o estado e move os exércitos atacantes", () => {
+    const result = attack(stateWith({ sp: 3 }), BRASIL_MAP, "sp", "mg", seq(0.99, 0.99, 0));
     expect(result.conquered).toBe(true);
-    expect(result.state.territories.fiorde).toEqual({ owner: "a", armies: 2 });
-    expect(result.state.territories.geleira!.armies).toBe(1);
+    expect(result.naval).toBe(false);
+    expect(result.state.territories.mg).toEqual({ owner: "a", armies: 2 });
+    expect(result.state.territories.sp!.armies).toBe(1);
   });
+});
 
-  it("declara vencedor quem domina todos os territórios", () => {
-    const all = Object.fromEntries(AURORA_MAP.territories.map((t) => [t.id, 1]));
-    delete all.fiorde;
-    all.geleira = 2;
-    const result = attack(stateWith(all), AURORA_MAP, "geleira", "fiorde", seq(0.99, 0));
+describe("objetivos e vitória", () => {
+  it("vence ao completar o objetivo de região", () => {
+    const state = stateWith({ pr: 1, sc: 3 });
+    state.objectives.a = objective("norte-sul");
+    for (const t of BRASIL_MAP.territories.filter((t) => t.region === "norte")) {
+      state.territories[t.id] = { owner: "a", armies: 1 };
+    }
+    const result = attack(state, BRASIL_MAP, "sc", "rs", seq(0.99, 0.99, 0));
+    expect(result.conquered).toBe(true);
     expect(result.state.winner).toBe("a");
     expect(result.state.phase).toBe("finished");
+  });
+
+  it("vence ao completar o objetivo de quantidade ao posicionar reforços", () => {
+    const owned = Object.fromEntries(
+      BRASIL_MAP.territories.slice(0, 14).map((t, i) => [t.id, i === 0 ? 1 : 2]),
+    );
+    const state = { ...stateWith(owned, "reinforce"), pendingReinforcements: 3 };
+    state.objectives.a = objective("14-estados-2-exercitos");
+    const first = BRASIL_MAP.territories[0]!.id;
+    const next = placeArmies(state, BRASIL_MAP, first, 1);
+    expect(next.winner).toBe("a");
+  });
+
+  it("não vence enquanto o objetivo está incompleto", () => {
+    const state = { ...stateWith({ ac: 1 }, "reinforce"), pendingReinforcements: 3 };
+    expect(placeArmies(state, BRASIL_MAP, "ac", 1).winner).toBeNull();
   });
 });
 
 describe("fortify e endTurn", () => {
   it("move exércitos entre vizinhos próprios deixando ao menos 1", () => {
-    const state = endAttackPhase(stateWith({ geleira: 4, taiga: 1 }));
-    const next = fortify(state, AURORA_MAP, "geleira", "taiga", 3);
-    expect(next.territories.taiga!.armies).toBe(4);
-    expect(() => fortify(state, AURORA_MAP, "geleira", "taiga", 4)).toThrow();
+    const state = endAttackPhase(stateWith({ sp: 4, pr: 1 }));
+    const next = fortify(state, BRASIL_MAP, "sp", "pr", 3);
+    expect(next.territories.pr!.armies).toBe(4);
+    expect(() => fortify(state, BRASIL_MAP, "sp", "pr", 4)).toThrow();
   });
 
   it("passa a vez e calcula os reforços do próximo jogador", () => {
-    const next = endTurn(stateWith({ geleira: 1 }), AURORA_MAP);
+    const next = endTurn(stateWith({ ac: 1 }), BRASIL_MAP);
     expect(next.currentPlayerIndex).toBe(1);
     expect(next.phase).toBe("reinforce");
-    // "b" tem 19 territórios + Verdejante, Árido e Coralina
-    expect(next.pendingReinforcements).toBe(9 + 4 + 3 + 3);
+    // "b" tem 26 estados (13) + Nordeste, Centro-Oeste, Sudeste e Sul
+    expect(next.pendingReinforcements).toBe(13 + 5 + 3 + 3 + 2);
+  });
+
+  it("não deixa posicionar em estado inimigo", () => {
+    const state = { ...stateWith({ ac: 1 }, "reinforce"), pendingReinforcements: 3 };
+    expect(() => placeArmies(state, BRASIL_MAP, "am", 1)).toThrow();
   });
 });

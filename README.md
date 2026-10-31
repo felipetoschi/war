@@ -1,28 +1,14 @@
-# Domínio
+# Domínio · Brasil
 
-Jogo de estratégia por turnos, de conquista de territórios, que roda no navegador.
-Os jogadores disputam o arquipélago fictício de **Aurora** — 4 continentes e 20 territórios —
-reforçando exércitos, atacando vizinhos com dados e remanejando tropas até que alguém domine o mapa.
+Jogo de estratégia por turnos, de conquista de territórios, que roda no navegador,
+jogado no **mapa do Brasil** — 26 estados + Distrito Federal, agrupados nas 5 regiões.
 
-## Como jogar
+- De **2 a 5 jogadores**, com **objetivos abertos** que todos podem ver.
+- Combate com **dados virtuais**: até 3 de ataque contra até 3 de defesa; empate favorece a defesa.
+- **Ataque naval ⚓:** estados do litoral atacam outros do litoral, mesmo sem fronteira,
+  com penalidade nos dados que aumenta com a distância (ex.: RN → RS tem −3 em cada dado).
 
-Cada turno tem três fases:
-
-1. **Reforço** — você recebe metade do número de territórios que possui (mínimo 3), mais o
-   bônus de cada continente que dominar por inteiro. Clique nos seus territórios para posicioná-los.
-2. **Ataque** — selecione um território seu com 2+ exércitos e clique num vizinho inimigo.
-   O atacante rola até 3 dados (sempre deixando 1 exército para trás) e o defensor até 3.
-   Os dados são comparados do maior para o menor; **empate favorece a defesa**.
-3. **Remanejamento** — mova exércitos entre territórios vizinhos seus.
-
-Vence quem conquistar todos os territórios.
-
-| Continente | Territórios | Bônus |
-| ---------- | ----------- | ----- |
-| Boreal     | 5           | +4    |
-| Verdejante | 5           | +4    |
-| Árido      | 5           | +3    |
-| Coralina   | 5           | +3    |
+📖 As regras completas, e o que ainda está em aberto, estão em [docs/REGRAS.md](docs/REGRAS.md).
 
 ## Desenvolvimento
 
@@ -42,11 +28,15 @@ npm run build      # build de produção em dist/
 ```
 src/
   game/          # motor do jogo: lógica pura, sem DOM, totalmente testada
-    types.ts     # tipos do estado da partida
-    map.ts       # mapa de Aurora (territórios, vizinhanças, continentes)
-    dice.ts      # rolagem e comparação de dados
-    rules.ts     # regras: reforço, ataque, remanejamento, turnos
-  main.ts        # interface (tabuleiro em SVG)
+    types.ts       # tipos do estado da partida
+    brasil.ts      # estados, fronteiras, litoral e regiões
+    map.ts         # consultas ao mapa (vizinhança, distância no litoral)
+    dice.ts        # rolagem e comparação de dados (com penalidade)
+    objectives.ts  # objetivos abertos e progresso
+    rules.ts       # regras: reforço, ataque (terra/mar), remanejamento, turnos, vitória
+  ui/
+    brasil-svg.ts  # contornos dos estados e posição dos marcadores
+  main.ts          # interface (mapa em SVG)
   style.css
 ```
 
@@ -64,9 +54,15 @@ partidas online e jogadores controlados por IA.
 
 ## Próximos passos
 
-- [ ] Tela de configuração da partida (número de jogadores, nomes, cores)
+- [ ] Decidir os pontos em aberto de [docs/REGRAS.md](docs/REGRAS.md)
+- [ ] Nomes personalizados para os jogadores
 - [ ] Escolher quantos exércitos mover após uma conquista
-- [ ] Objetivos secretos alternativos à conquista total
+- [ ] Animação dos dados
 - [ ] Jogadores controlados por IA
 - [ ] Salvar/carregar partida
 - [ ] Multijogador online
+
+## Créditos
+
+Contornos dos estados: [svg-maps](https://github.com/VictorCazanave/svg-maps), de Victor Cazanave,
+sob licença [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).

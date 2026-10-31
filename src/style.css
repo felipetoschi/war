@@ -29,7 +29,7 @@ body {
   padding: 16px;
   display: grid;
   gap: 16px;
-  grid-template-columns: 1fr 280px;
+  grid-template-columns: 1fr 320px;
 }
 
 @media (max-width: 800px) {
@@ -50,37 +50,76 @@ h1 {
   border-radius: 12px;
 }
 
-.board .link {
-  stroke: rgba(255, 255, 255, 0.35);
-  stroke-width: 2;
-  stroke-dasharray: 4 4;
+.board .state {
+  stroke: #0f1b2a;
+  stroke-width: 1;
+  cursor: pointer;
+  transition: filter 0.15s;
 }
 
-.board .territory {
+.board .state:hover {
+  filter: brightness(1.15);
+}
+
+.board .state.selected {
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+.board .state.target {
+  stroke: #fff;
+  stroke-width: 2.5;
+}
+
+.board .state.target-naval {
+  stroke: #9fe7ff;
+  stroke-width: 2.5;
+  stroke-dasharray: 5 3;
+}
+
+.board .label {
   cursor: pointer;
 }
 
-.board .territory circle.land {
-  stroke-width: 6;
+.board .badge {
+  stroke: #fff;
+  stroke-width: 1.5;
 }
 
-.board .territory.selected circle.land {
-  stroke: var(--accent);
+.board .leader {
+  stroke: rgba(255, 255, 255, 0.7);
+  stroke-width: 1;
 }
 
-.board .territory text {
-  pointer-events: none;
-  text-anchor: middle;
+.board .anchor {
   fill: #fff;
+}
+
+.board text {
+  text-anchor: middle;
+  pointer-events: none;
   font-weight: 700;
 }
 
-.board .territory .name {
-  font-size: 13px;
-  font-weight: 600;
+.board .armies {
+  fill: #fff;
+  font-size: 11px;
+}
+
+.board .sigla {
+  fill: #fff;
+  font-size: 9px;
   paint-order: stroke;
-  stroke: #0008;
-  stroke-width: 3px;
+  stroke: #0009;
+  stroke-width: 2.5px;
+}
+
+.board .penalty {
+  fill: #9fe7ff;
+  font-size: 10px;
+  paint-order: stroke;
+  stroke: #000a;
+  stroke-width: 2.5px;
 }
 
 .panel {
@@ -134,4 +173,68 @@ button:disabled {
   overflow-y: auto;
   margin: 0;
   padding-left: 18px;
+}
+
+h2 {
+  margin: 4px 0 0;
+  font-size: 1rem;
+}
+
+.players,
+.regions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.players li {
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+
+.players li.current {
+  border-color: var(--accent);
+}
+
+.players li.out {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
+.objective {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.regions li {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+}
+
+.new-game {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+select {
+  font: inherit;
+  margin-left: 6px;
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.credits {
+  font-size: 0.75rem;
+}
+
+.credits a {
+  color: var(--muted);
 }

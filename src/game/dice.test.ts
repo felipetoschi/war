@@ -15,6 +15,13 @@ describe("compareRolls", () => {
   it("só compara a quantidade mínima de dados", () => {
     expect(compareRolls([6, 6, 6], [1])).toMatchObject({ attackerLosses: 0, defenderLosses: 1 });
   });
+
+  it("aplica a penalidade naval nos dados do atacante, com mínimo 1", () => {
+    const r = compareRolls([6, 2], [4, 1], 2);
+    expect(r.effectiveAttackRolls).toEqual([4, 1]);
+    // 4 x 4 empata (defesa vence), 1 x 1 empata (defesa vence)
+    expect(r).toMatchObject({ attackerLosses: 2, defenderLosses: 0 });
+  });
 });
 
 describe("rollDice", () => {
