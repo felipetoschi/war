@@ -34,6 +34,7 @@ import { LABELS, STATE_PATHS, VIEW_BOX } from "./ui/brasil-svg";
 const map = BRASIL_MAP;
 const COLORS = ["#d63c31", "#2f6fd6", "#1f9a52", "#e3b021", "#8e44ad"];
 const UNCLAIMED = "#c9d3dd";
+const CREDITS = `<p class="credits">Mapa: <a href="https://github.com/VictorCazanave/svg-maps" target="_blank" rel="noopener">svg-maps</a> (CC BY 4.0)</p>`;
 
 type Screen = "players" | "order" | "game";
 
@@ -256,16 +257,17 @@ function renderBoard(game: GameState): string {
         ? `<line class="leader" x1="${anchor.x}" y1="${anchor.y}" x2="${x}" y2="${y}" /><circle class="anchor" cx="${anchor.x}" cy="${anchor.y}" r="2" />`
         : "";
       const badge = ts
-        ? `<circle class="badge" cx="${x}" cy="${y}" r="11" fill="${playerById(ts.owner).color}" />
-           <text class="armies" x="${x}" y="${y + 4}">${ts.armies}</text>`
-        : `<circle class="badge empty" cx="${x}" cy="${y}" r="8" />`;
+        ? `<circle class="badge" cx="${x}" cy="${y}" r="13" fill="${playerById(ts.owner).color}" />
+           <text class="armies" x="${x}" y="${y + 4.5}">${ts.armies}</text>`
+        : `<circle class="badge empty" cx="${x}" cy="${y}" r="9" />`;
       const penaltyTag = penalty
-        ? `<text class="penalty" x="${x + 14}" y="${y - 10}">−${penalty}</text>`
+        ? `<text class="penalty" x="${x + 15}" y="${y + 4}">−${penalty}</text>`
         : "";
       return `
         <g class="label" data-id="${t.id}">
+          <circle class="hit" cx="${x}" cy="${y + 6}" r="20" />
           ${leader}${badge}
-          <text class="sigla" x="${x}" y="${y + 22}">${sigla(t.id)}</text>
+          <text class="sigla" x="${x}" y="${y + 24}">${sigla(t.id)}</text>
           ${penaltyTag}
         </g>`;
     })
@@ -382,8 +384,11 @@ function renderPanel(game: GameState): string {
 
   return `
     <aside class="panel">
-      ${renderPhase(game)}
-      ${renderBattle()}
+      <section class="panel-main">
+        ${renderPhase(game)}
+        ${renderBattle()}
+      </section>
+      <section class="panel-side">
       <h3>Jogadores <span class="muted">(ordem de jogada)</span></h3>
       <ul class="players">${players}</ul>
       <p class="muted">🎯 Objetivo: ser o último jogador vivo.</p>
@@ -391,6 +396,8 @@ function renderPanel(game: GameState): string {
       <ul class="regions">${regions}</ul>
       <ul class="log">${log.map((l) => `<li>${l}</li>`).join("")}</ul>
       <button id="quit" class="link">Nova partida</button>
+      ${CREDITS}
+      </section>
     </aside>`;
 }
 
@@ -408,8 +415,8 @@ function render() {
   else if (screen === "order") body = `<div class="center">${renderOrderScreen()}</div>`;
   else body = `<div class="layout"><main>${renderBoard(state!)}</main>${renderPanel(state!)}</div>`;
 
-  const footer = `<footer class="credits">Mapa: <a href="https://github.com/VictorCazanave/svg-maps" target="_blank" rel="noopener">svg-maps</a> (CC BY 4.0)</footer>`;
-  app.innerHTML = renderHeader() + body + footer;
+  app.className = screen === "game" ? "in-game" : "";
+  app.innerHTML = renderHeader() + body + (screen === "game" ? "" : CREDITS);
   bindEvents();
 }
 

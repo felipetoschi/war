@@ -25,6 +25,14 @@ body {
   margin: 0;
   min-height: 100vh;
   background: var(--bg);
+  /* toque: sem zoom no duplo toque, sem destaque azul e sem seleção de texto no mapa */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.board {
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 #app {
@@ -47,17 +55,87 @@ body {
   font-size: 1.4rem;
 }
 
-/* ---- layout do jogo ---- */
+/* ---- layout do jogo (pensado para tablet) ---- */
 .layout {
   display: grid;
-  gap: 16px;
+  gap: 12px;
   grid-template-columns: 1fr 340px;
   align-items: start;
 }
 
-@media (max-width: 860px) {
+.panel-main,
+.panel-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Tablet deitado (e computador): mapa e painel lado a lado, tudo dentro da tela. */
+@media (min-width: 900px) and (orientation: landscape) {
+  #app.in-game {
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 12px;
+  }
+
+  #app.in-game .layout {
+    flex: 1;
+    min-height: 0;
+    align-items: stretch;
+  }
+
+  #app.in-game main {
+    min-height: 0;
+  }
+
+  #app.in-game .board {
+    height: 100%;
+  }
+
+  #app.in-game .panel {
+    min-height: 0;
+    overflow-y: auto;
+  }
+}
+
+/* Tablet em pé: mapa em cima, painel embaixo em duas colunas. */
+@media (orientation: portrait), (max-width: 899px) {
   .layout {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 600px) and (orientation: portrait) {
+  #app.in-game {
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 12px;
+  }
+
+  #app.in-game .layout {
+    flex: 1;
+    min-height: 0;
+    grid-template-rows: auto minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  #app.in-game .panel {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+    gap: 16px;
+    overflow: hidden;
+  }
+
+  #app.in-game .panel-main,
+  #app.in-game .panel-side {
+    max-height: 100%;
+    overflow-y: auto;
   }
 }
 
@@ -303,12 +381,18 @@ button:disabled {
   transition: filter 0.15s;
 }
 
-.board .state:hover {
-  filter: brightness(1.15);
+@media (hover: hover) {
+  .board .state:hover {
+    filter: brightness(1.15);
+  }
+
+  .board .state.free:hover {
+    filter: brightness(0.85);
+  }
 }
 
-.board .state.free:hover {
-  filter: brightness(0.85);
+.board .hit {
+  fill: transparent;
 }
 
 .board .state.selected {
@@ -359,7 +443,7 @@ button:disabled {
 
 .board .armies {
   fill: #fff;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .board .sigla {
@@ -371,6 +455,7 @@ button:disabled {
 }
 
 .board .penalty {
+  text-anchor: start;
   fill: #9fe7ff;
   font-size: 10px;
   paint-order: stroke;
@@ -430,7 +515,7 @@ button:disabled {
 }
 
 .credits {
-  margin-top: 16px;
+  margin: 16px 0 0;
   font-size: 0.75rem;
   color: var(--muted);
   text-align: center;

@@ -10,6 +10,7 @@ jogado no **mapa do Brasil** — 26 estados + Distrito Federal, agrupados nas 5 
   com penalidade nos dados que aumenta com a distância (ex.: RN → RS tem −3 em cada dado).
 - **Objetivo:** ser o último jogador vivo.
 - Botão de **tela cheia**.
+- Interface pensada para **tablet** (deitado ou em pé). O layout para celular vem depois.
 
 📖 As regras completas, e o que ainda está em aberto, estão em [docs/REGRAS.md](docs/REGRAS.md).
 
