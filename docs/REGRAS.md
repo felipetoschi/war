@@ -106,11 +106,16 @@ jogador.
   **⛶ tela cheia** e **☰ menu** (regras, bônus, histórico e nova partida).
 - O celular terá um layout próprio depois.
 
+## Próximas alterações (anotadas, ainda não implementadas)
+
+- [ ] **Bônus por região:** manter o bônus de cada região (Norte +5, Nordeste +5, Centro-Oeste +3,
+      Sudeste +3, Sul +2) e **destacar as regiões no mapa de forma discreta** (por exemplo, um
+      contorno mais grosso ou uma leve tonalidade em volta de cada região, com o nome e o bônus).
+
 ## Em aberto (para decidir)
 
 - [ ] **Ataque entre estados sem divisa** (antigo ataque pelo mar, com penalidade nos dados):
       retirado por enquanto — só se ataca quem faz divisa. A numeração do litoral continua nos
       dados do mapa (`coastIndex`) caso a ideia volte de outra forma.
-- [ ] **Bônus por região:** manter? (a regra "1 soldado a cada 2 estados" foi aplicada junto com ele)
 - [ ] **Mínimo de reforço:** hoje, quem tem só 1 estado e nenhuma região não recebe soldados.
 - [ ] **Objetivos**, como no War clássico?
