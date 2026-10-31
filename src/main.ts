@@ -17,6 +17,7 @@ import {
   maxAttackers,
   MIN_PLAYERS,
   movableArmies,
+  movableTo,
   mustTrade,
   placeArmies,
   playersToRollForOrder,
@@ -37,6 +38,7 @@ import {
   toggleFullscreen,
 } from "./ui/fullscreen";
 import { pawnSvg, reserveHtml } from "./ui/pieces";
+import { musicOn, sfx, sfxOn, toggleMusic, toggleSfx, unlockAudio } from "./ui/audio";
 
 const map = BRASIL_MAP;
 const COLORS = ["#d63c31", "#2f6fd6", "#1f9a52", "#8e44ad"];
@@ -56,11 +58,11 @@ const SYMBOL_NAME: Record<Card["symbol"], string> = {
 
 /**
  * Lugares à mesa: cada jogador fica num canto do tablet.
- * Com 2 jogadores, eles ficam frente a frente (cantos opostos).
- * Os de cima veem o painel virado para eles (rotação de 180°).
+ * Jogadores 1 e 2 embaixo (esquerda e direita); 3 e 4 em cima (direita e esquerda),
+ * seguindo a volta da mesa. Os de cima veem o painel virado para eles (180°).
  */
-type Seat = "bl" | "tr" | "br" | "tl";
-const SEATS: Seat[] = ["bl", "tr", "br", "tl"];
+type Seat = "bl" | "br" | "tr" | "tl";
+const SEATS: Seat[] = ["bl", "br", "tr", "tl"];
 
 interface LastBattle {
   from: TerritoryId;
@@ -100,7 +102,7 @@ const escapeHtml = (text: string) =>
     /[&<>"']/g,
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
   );
-const sigla = (id: TerritoryId) => id.toUpperCase();
+const sigla = (id: TerritoryId) => (id === "go" ? "GO/DF" : id.toUpperCase());
 const stateName = (id: TerritoryId) => getTerritory(map, id).name;
 const playerById = (game: GameState, id: string) => game.players.find((p) => p.id === id)!;
 const nameOf = (p: Player) => escapeHtml(p.name);
@@ -116,8 +118,16 @@ function addLog(message: string) {
   if (log.length > 80) log.pop();
 }
 
-/** Aplica uma jogada com dados: anima a rolagem e só depois mostra o resultado. */
-function withDiceRoll(kind: NonNullable<typeof rolling>, update: () => void) {
+/**
+ * Aplica uma jogada com dados: toca o som dos dados, anima a rolagem e só depois
+ * mostra o resultado (e toca `after`, o som do resultado).
+ */
+function withDiceRoll(
+  kind: NonNullable<typeof rolling>,
+  dice: number,
+  update: () => void,
+  after?: () => void,
+) {
   const before = state;
   const id = gameId;
   const messages: string[] = [];
@@ -133,12 +143,14 @@ function withDiceRoll(kind: NonNullable<typeof rolling>, update: () => void) {
   deferredLog = null;
   frozen = before;
   rolling = kind;
+  sfx.dice(dice, ROLL_MS / 1000);
   render();
   setTimeout(() => {
     if (id !== gameId) return;
     rolling = null;
     frozen = null;
     messages.forEach(addLog);
+    after?.();
     render();
   }, ROLL_MS);
 }
@@ -191,7 +203,7 @@ function renderPlayersScreen(): string {
         <div class="chips">${options}</div>
         <h2>2. Nome dos jogadores</h2>
         <div class="names">${inputs}</div>
-        <p class="muted">Cada jogador fica num canto do tablet. Os 27 estados serão sorteados e,
+        <p class="muted">Cada jogador fica num canto do tablet. Os 26 territórios serão sorteados e,
           depois, os dados decidem quem começa.</p>
         <button id="deal" class="primary">Sortear os estados 🎲</button>
         <p class="credits">${CREDITS}</p>
@@ -210,6 +222,7 @@ function onTerritoryClick(id: TerritoryId) {
       case "placement":
       case "reinforce":
         state = placeArmies(state!, map, id, 1);
+        sfx.place();
         break;
       case "attack":
         if (owner === me) {
@@ -227,6 +240,7 @@ function onTerritoryClick(id: TerritoryId) {
         if (owner !== me) break;
         if (selected && selected !== id && getTerritory(map, selected).neighbors.includes(id)) {
           state = fortify(state!, map, selected, id, 1);
+          sfx.place();
           if (movableArmies(state, selected) === 0) selected = null;
         } else {
           selected = selected === id ? null : id;
@@ -239,7 +253,7 @@ function onTerritoryClick(id: TerritoryId) {
 }
 
 function onRollAttack() {
-  withDiceRoll("attack", () => {
+  withDiceRoll("attack", state!.battle!.soldiers, () => {
     state = rollAttack(state!);
   });
 }
@@ -249,37 +263,50 @@ function onRollDefense() {
   const pending = game.battle!;
   const attacker = playerById(game, pending.attacker);
   const defender = playerById(game, pending.defender);
-  withDiceRoll("defense", () => {
-    const result = rollDefense(game);
-    state = result.state;
-    lastBattle = {
-      from: pending.from,
-      to: pending.to,
-      attacker: attacker.id,
-      defender: defender.id,
-      battle: result.battle,
-      conquered: result.conquered,
-    };
-    const { attackerLosses, defenderLosses } = result.battle;
-    addLog(
-      `${nameOf(attacker)}: ${sigla(pending.from)} ⚔ ${sigla(pending.to)} com ${pending.soldiers} — ataque perdeu ${attackerLosses}, defesa perdeu ${defenderLosses}` +
-        (result.conquered ? ` · ${stateName(pending.to)} conquistado!` : ""),
-    );
-    if (result.card) addLog(`🃏 ${nameOf(attacker)} ganhou a carta ${cardLabel(result.card)}`);
-    if (result.eliminated) {
+  let outcome: ReturnType<typeof rollDefense> | null = null;
+  const resultSound = () => {
+    if (!outcome) return;
+    if (outcome.state.winner) sfx.victory();
+    else if (outcome.eliminated) sfx.eliminated();
+    else if (outcome.conquered) sfx.conquer();
+    else sfx.hold();
+  };
+  withDiceRoll(
+    "defense",
+    pending.defenseDice,
+    () => {
+      const result = rollDefense(game);
+      outcome = result;
+      state = result.state;
+      lastBattle = {
+        from: pending.from,
+        to: pending.to,
+        attacker: attacker.id,
+        defender: defender.id,
+        battle: result.battle,
+        conquered: result.conquered,
+      };
+      const { attackerLosses, defenderLosses } = result.battle;
       addLog(
-        `☠ ${nameOf(defender)} foi eliminado por ${nameOf(attacker)}, que ficou com as cartas dele!`,
+        `${nameOf(attacker)}: ${sigla(pending.from)} ⚔ ${sigla(pending.to)} com ${pending.soldiers} — ataque perdeu ${attackerLosses}, defesa perdeu ${defenderLosses}` +
+          (result.conquered ? ` · ${stateName(pending.to)} conquistado!` : ""),
       );
-    }
-    // Mantém a seleção para atacar de novo, se ainda der.
-    const canContinue = state.territories[pending.from]!.armies > 1;
-    if (result.conquered || !canContinue) target = null;
-    if (!canContinue) selected = null;
-  });
+      if (result.eliminated) {
+        addLog(
+          `☠ ${nameOf(defender)} foi eliminado por ${nameOf(attacker)}, que ficou com as cartas dele!`,
+        );
+      }
+      // Mantém a seleção para atacar de novo, se ainda der.
+      const canContinue = state.territories[pending.from]!.armies > 1;
+      if (result.conquered || !canContinue) target = null;
+      if (!canContinue) selected = null;
+    },
+    resultSound,
+  );
 }
 
 function rollOrder(players: string[]) {
-  withDiceRoll("order", () => {
+  withDiceRoll("order", players.length, () => {
     for (const id of players) state = rollForOrder(state!, map, id);
     if (state!.phase !== "order") {
       addLog(`Ordem de jogada: ${state!.players.map(nameOf).join(" → ")}`);
@@ -305,6 +332,7 @@ function onTrade() {
       ? ` e +${OWNED_CARD_BONUS} em ${result.bonusTerritories.map(sigla).join(", ")}`
       : "";
     addLog(`🃏 ${nameOf(player)} trocou cartas: +${result.armies} soldados${bonus}`);
+    sfx.trade();
   });
 }
 
@@ -316,9 +344,10 @@ function renderBoard(game: GameState): string {
       if (canAttack(game, map, selected, t.id)) targets.add(t.id);
     }
   }
-  if (selected && game.phase === "fortify" && movableArmies(game, selected) > 0) {
+  if (selected && game.phase === "fortify") {
     for (const n of getTerritory(map, selected).neighbors) {
-      if (game.territories[n]?.owner === currentPlayer(game).id) targets.add(n);
+      const mine = game.territories[n]?.owner === currentPlayer(game).id;
+      if (mine && movableTo(game, selected, n) > 0) targets.add(n);
     }
   }
   const fighting = game.battle ?? (rolling === "defense" ? lastBattle : null);
@@ -332,8 +361,16 @@ function renderBoard(game: GameState): string {
       if (selected === t.id || fighting?.from === t.id) classes.push("selected");
       if (target === t.id || fighting?.to === t.id) classes.push("defending");
       if (targets.has(t.id)) classes.push("target");
-      if (placing && ts.owner !== me) classes.push("dim");
-      return `<path class="${classes.join(" ")}" data-id="${t.id}" d="${STATE_PATHS[t.id]}" fill="${playerById(game, ts.owner).color}"><title>${t.name}</title></path>`;
+      const dim = placing && ts.owner !== me;
+      if (dim) classes.push("dim");
+      const color = playerById(game, ts.owner).color;
+      const path = (cls: string) =>
+        `<path class="${cls}" data-id="${t.id}" d="${STATE_PATHS[t.id]}" fill="${color}"><title>${t.name}</title></path>`;
+      if (t.id !== "go") return path(classes.join(" "));
+      // Goiás/DF: o desenho do DF é pintado por cima, na mesma cor, sem a divisa interna.
+      // As duas partes ficam num grupo, para esmaecerem juntas.
+      const cls = classes.filter((c) => c !== "dim").join(" ");
+      return `<g class="${dim ? "dim" : ""}">${path(cls)}<path class="${cls} merge" data-id="go" d="${STATE_PATHS.df}" fill="${color}" style="stroke:${color}"><title>${t.name}</title></path></g>`;
     })
     .join("");
 
@@ -379,7 +416,8 @@ function seatDice(game: GameState, player: Player): string {
   // Ordem de jogada (e, na rodada inicial, para lembrar): cada um vê o próprio dado.
   if (game.phase === "order" || game.phase === "placement") {
     const rolls = state!.orderRolls[player.id] ?? [];
-    const before = frozen?.orderRolls[player.id]?.length ?? rolls.length;
+    // Durante a rolagem, os dados novos são os que o estado anterior (congelado) não tinha.
+    const before = frozen ? (frozen.orderRolls[player.id]?.length ?? 0) : rolls.length;
     return rolls
       .map((v, i) =>
         dieHtml(v, "neutral", {
@@ -521,7 +559,8 @@ function seatActions(game: GameState, player: Player): string {
       return `${step}<button id="end-attack">Encerrar ataques</button>`;
     }
     case "fortify":
-      return `<p class="note"><b>Remanejar</b> (opcional): toque num estado seu e depois num vizinho seu para mover 1 soldado.</p>
+      return `<p class="note"><b>Remanejar</b> (opcional): toque num estado seu e depois num vizinho seu para mover 1 soldado. Máximo de 3 para cada vizinho, e sempre fica 1 em cada estado.</p>
+        ${selected ? `<p class="note">De <b>${stateName(selected)}</b>: ${movableArmies(game, selected)} soldado(s) disponível(is).</p>` : ""}
         <button id="end-turn" class="primary">Passar a vez</button>`;
     default:
       return "";
@@ -609,8 +648,10 @@ function toolbar(): string {
   const fs = fullscreenSupported()
     ? `<button id="fullscreen" class="tool" title="Tela cheia">${isFullscreen() ? "🗗" : "⛶"}</button>`
     : "";
+  const music = `<button id="toggle-music" class="tool ${musicOn() ? "" : "off"}" title="Música">🎵</button>`;
+  const sound = `<button id="toggle-sfx" class="tool" title="Efeitos sonoros">${sfxOn() ? "🔊" : "🔇"}</button>`;
   const menu = screen === "game" ? `<button id="menu" class="tool" title="Menu">☰</button>` : "";
-  return `<div class="toolbar">${fs}${menu}</div>`;
+  return `<div class="toolbar">${music}${sound}${fs}${menu}</div>`;
 }
 
 function renderMenu(): string {
@@ -627,8 +668,9 @@ function renderMenu(): string {
           <li>Rodada inicial: cada um coloca ${INITIAL_ARMIES} soldados.</li>
           <li>Ataque só a estados vizinhos (que fazem divisa): escolha a origem, o alvo e com quantos soldados (até 3).</li>
           <li>O atacante rola os dados vermelhos e o defensor, os amarelos, cada um no seu canto. O maior vence; empate é da defesa.</li>
-          <li>Cada conquista vale uma carta (■ ▲ ● ou ★ coringa), visível para todos.</li>
+          <li>Quem conquistar pelo menos um estado no turno ganha uma carta no fim do turno (■ ▲ ● ou ★ coringa), visível para todos.</li>
           <li>3 cartas iguais ou 3 diferentes valem uma troca por soldados (próxima: +${tradeValue(state.trades)}). Carta de estado seu: +${OWNED_CARD_BONUS} nele. Com ${MAX_HAND} cartas, a troca é obrigatória.</li>
+          <li>Remanejar: até 3 soldados de um estado para cada vizinho, sempre deixando 1.</li>
           <li>A partir da rodada 2: 1 soldado a cada 2 estados + bônus de região.</li>
           <li>Vence o último jogador vivo.</li>
         </ol>
@@ -678,6 +720,14 @@ function on(selector: string, handler: (el: HTMLElement) => void) {
 
 function bindEvents() {
   on("#fullscreen", () => void toggleFullscreen());
+  on("#toggle-music", () => {
+    toggleMusic();
+    render();
+  });
+  on("#toggle-sfx", () => {
+    toggleSfx();
+    render();
+  });
   on("#menu", () => {
     menuOpen = true;
     render();
@@ -706,7 +756,8 @@ function bindEvents() {
     seats = Object.fromEntries(players.map((p, i) => [p.id, SEATS[i]!]));
     state = createGame(map, players);
     screen = "game";
-    addLog("Os 27 estados foram sorteados entre os jogadores.");
+    addLog("Os 26 territórios foram sorteados entre os jogadores.");
+    sfx.trade();
     render();
   });
 
@@ -717,6 +768,7 @@ function bindEvents() {
     act(() => {
       lastBattle = null;
       state = declareAttack(state!, map, selected!, target!, Number(el.dataset.attack));
+      sfx.attack();
     }),
   );
   on("#roll-attack", onRollAttack);
@@ -738,7 +790,15 @@ function bindEvents() {
       target = null;
       selectedCards = [];
       lastBattle = null;
+      const player = currentPlayer(state!);
+      const before = state!.hands[player.id]?.length ?? 0;
       state = endTurn(state!, map);
+      const hand = state.hands[player.id] ?? [];
+      if (hand.length > before) {
+        addLog(`🃏 ${nameOf(player)} ganhou a carta ${cardLabel(hand[hand.length - 1]!)}`);
+        sfx.card();
+      }
+      sfx.turn();
     }),
   );
   on("#new-game", () => {
@@ -754,4 +814,6 @@ function bindEvents() {
 }
 
 onFullscreenChange(render);
+// O navegador só libera o som depois do primeiro toque na tela.
+document.addEventListener("pointerdown", unlockAudio, { once: true, capture: true });
 render();

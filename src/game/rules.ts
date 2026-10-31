@@ -19,6 +19,8 @@ export const MAX_DEFENSE_DICE = 3;
 export const INITIAL_ARMIES = 3;
 /** A cada quantos estados o jogador ganha 1 soldado no reforço. */
 export const TERRITORIES_PER_REINFORCEMENT = 2;
+/** No remanejamento, no máximo quantos soldados vão de um estado para cada vizinho, por turno. */
+export const MAX_FORTIFY_PER_NEIGHBOR = 3;
 
 function shuffle<T>(items: T[], rng: Rng): T[] {
   const copy = [...items];
@@ -30,7 +32,7 @@ function shuffle<T>(items: T[], rng: Rng): T[] {
 }
 
 /**
- * Cria uma partida: os 27 estados são sorteados entre os jogadores (1 soldado em cada),
+ * Cria uma partida: os 26 territórios são sorteados entre os jogadores (1 soldado em cada),
  * o mais igualmente possível, e o baralho de cartas é embaralhado.
  * Em seguida, os dados decidem a ordem de jogada (`rollForOrder`).
  */
@@ -58,6 +60,8 @@ export function createGame(map: GameMap, players: Player[], rng: Rng = Math.rand
     round: 0,
     pendingReinforcements: 0,
     fortified: {},
+    fortifyMoves: {},
+    conqueredThisTurn: false,
     winner: null,
   };
 }
@@ -159,6 +163,8 @@ function startTurn(state: GameState, map: GameMap, index: number): GameState {
   const player = state.players[index]!.id;
   state.currentPlayerIndex = index;
   state.fortified = {};
+  state.fortifyMoves = {};
+  state.conqueredThisTurn = false;
   state.pendingReinforcements = state.round >= 2 ? reinforcementsFor(state, map, player) : 0;
   const canTrade = state.round >= 2 && hasValidSet(state.hands[player] ?? []);
   state.phase = state.pendingReinforcements > 0 || canTrade ? "reinforce" : "attack";
@@ -324,8 +330,6 @@ export interface AttackOutcome {
   conquered: boolean;
   /** Dono anterior, se foi eliminado com esta conquista. */
   eliminated: PlayerId | null;
-  /** Carta ganha pela conquista (null se o monte acabou). */
-  card: Card | null;
 }
 
 /** Compra uma carta para o jogador; se o monte acabar, as cartas trocadas voltam embaralhadas. */
@@ -342,7 +346,7 @@ function drawCard(state: GameState, player: PlayerId, rng: Rng): Card | null {
 /**
  * 3º passo: o defensor rola os dados amarelos e o combate é resolvido.
  * O maior dado vence; empate é da defesa. Ao conquistar, os soldados que atacaram e
- * sobreviveram ocupam o estado, e o atacante ganha uma carta.
+ * sobreviveram ocupam o estado (e o atacante ganha uma carta no fim do turno).
  */
 export function rollDefense(state: GameState, rng: Rng = Math.random): AttackOutcome {
   const pending = state.battle;
@@ -358,13 +362,12 @@ export function rollDefense(state: GameState, rng: Rng = Math.random): AttackOut
 
   const conquered = target.armies === 0;
   let eliminated: PlayerId | null = null;
-  let card: Card | null = null;
   if (conquered) {
     const survivors = pending.soldiers - battle.attackerLosses;
     target.owner = pending.attacker;
     target.armies = survivors;
     source.armies -= survivors;
-    card = drawCard(next, pending.attacker, rng);
+    next.conqueredThisTurn = true;
     if (territoriesOf(next, pending.defender).length === 0) {
       eliminated = pending.defender;
       // Quem elimina um jogador fica com as cartas dele.
@@ -379,7 +382,7 @@ export function rollDefense(state: GameState, rng: Rng = Math.random): AttackOut
       next.phase = "finished";
     }
   }
-  return { state: next, battle, conquered, eliminated, card };
+  return { state: next, battle, conquered, eliminated };
 }
 
 /** Ataque completo de uma vez (declara, rola ataque e defesa). Útil para testes. */
@@ -407,9 +410,16 @@ export function movableArmies(state: GameState, territory: TerritoryId): number 
   return Math.max(0, armies - 1 - (state.fortified[territory] ?? 0));
 }
 
+/** Quantos soldados ainda podem ir de `from` para o vizinho `to` neste turno (máx. 3). */
+export function movableTo(state: GameState, from: TerritoryId, to: TerritoryId): number {
+  const sent = state.fortifyMoves[`${from}>${to}`] ?? 0;
+  return Math.max(0, Math.min(MAX_FORTIFY_PER_NEIGHBOR - sent, movableArmies(state, from)));
+}
+
 /**
- * Remanejamento: move soldados entre estados vizinhos (por terra) do jogador da vez.
- * Fica sempre 1 soldado na origem, e quem já foi remanejado não se move de novo no turno.
+ * Remanejamento: move soldados entre estados vizinhos do jogador da vez.
+ * No máximo 3 soldados de um estado para cada vizinho por turno; fica sempre 1 soldado
+ * na origem; e quem já foi remanejado não se move de novo no turno.
  */
 export function fortify(
   state: GameState,
@@ -423,19 +433,27 @@ export function fortify(
   assertOwnedByCurrent(state, to);
   if (!areNeighbors(map, from, to)) throw new Error("Os estados não fazem fronteira");
   if (!Number.isInteger(amount) || amount < 1 || amount > movableArmies(state, from)) {
-    throw new Error("Esses soldados não podem ser remanejados");
+    throw new Error("Esses soldados não podem ser remanejados (fica pelo menos 1)");
+  }
+  if (amount > movableTo(state, from, to)) {
+    throw new Error(`No máximo ${MAX_FORTIFY_PER_NEIGHBOR} soldados para cada vizinho por turno`);
   }
   const next = structuredClone(state);
   next.territories[from]!.armies -= amount;
   next.territories[to]!.armies += amount;
   next.fortified[to] = (next.fortified[to] ?? 0) + amount;
+  next.fortifyMoves[`${from}>${to}`] = (next.fortifyMoves[`${from}>${to}`] ?? 0) + amount;
   return next;
 }
 
-/** Passa a vez para o próximo jogador ainda vivo. */
-export function endTurn(state: GameState, map: GameMap): GameState {
+/**
+ * Passa a vez para o próximo jogador ainda vivo. Como no War, quem conquistou pelo menos
+ * um estado no turno ganha uma carta (no máximo uma por turno).
+ */
+export function endTurn(state: GameState, map: GameMap, rng: Rng = Math.random): GameState {
   assertPhase(state, "attack", "fortify");
   const next = structuredClone(state);
+  if (next.conqueredThisTurn) drawCard(next, currentPlayer(next).id, rng);
   let index = state.currentPlayerIndex;
   do {
     index = (index + 1) % state.players.length;

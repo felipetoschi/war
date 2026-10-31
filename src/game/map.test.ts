@@ -4,16 +4,16 @@ import { BRASIL_MAP } from "./brasil";
 describe("BRASIL_MAP", () => {
   const ids = new Set(BRASIL_MAP.territories.map((t) => t.id));
 
-  it("tem os 26 estados + DF, sem repetição", () => {
-    expect(BRASIL_MAP.territories).toHaveLength(27);
-    expect(ids.size).toBe(27);
+  it("tem 26 territórios (Goiás/DF juntos), sem repetição", () => {
+    expect(BRASIL_MAP.territories).toHaveLength(26);
+    expect(ids.size).toBe(26);
   });
 
   it("tem as 5 regiões com a quantidade certa de estados", () => {
     const count = (r: string) => BRASIL_MAP.territories.filter((t) => t.region === r).length;
     expect(count("norte")).toBe(7);
     expect(count("nordeste")).toBe(9);
-    expect(count("centro-oeste")).toBe(4);
+    expect(count("centro-oeste")).toBe(3);
     expect(count("sudeste")).toBe(4);
     expect(count("sul")).toBe(3);
   });
@@ -37,7 +37,7 @@ describe("BRASIL_MAP", () => {
       seen.add(id);
       queue.push(...BRASIL_MAP.territories.find((t) => t.id === id)!.neighbors);
     }
-    expect(seen.size).toBe(27);
+    expect(seen.size).toBe(26);
   });
 
   it("ordena os 17 estados litorâneos de 0 a 16, e vizinhos no litoral fazem fronteira", () => {

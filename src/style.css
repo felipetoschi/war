@@ -1,9 +1,11 @@
 :root {
-  --sea: #1d4e6e;
-  --panel: #12263a;
-  --panel-2: #1f3a56;
-  --text: #eef3f8;
-  --muted: #a9bbcd;
+  /* tema claro: mar azul-claro e painéis cor de papel */
+  --sea: #8cc8e8;
+  --panel: #fbf7ee;
+  --panel-2: #e9e1cf;
+  --seat: #fbf7eeeb;
+  --text: #1f2d3a;
+  --muted: #5d6f80;
   --accent: #f5c542;
   --attack: #d63c31;
   --defense: #f2c230;
@@ -29,7 +31,7 @@ body {
 
 body {
   /* a "mesa": mar ao fundo, sem bordas em volta do mapa */
-  background: radial-gradient(ellipse at center, #2a6a94 0%, #1d4e6e 55%, #133650 100%);
+  background: radial-gradient(ellipse at center, #bfe4f7 0%, #9dd2ee 55%, #7bbde0 100%);
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   overflow: hidden;
@@ -65,7 +67,7 @@ p {
 }
 
 .warn {
-  color: var(--accent);
+  color: #a35f00;
   font-weight: 700;
 }
 
@@ -99,8 +101,9 @@ button.primary {
 }
 
 .chip.active {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: #c9940a;
+  background: #fff3c4;
+  color: #6b4b00;
 }
 
 .attack-count {
@@ -134,7 +137,7 @@ button.primary {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  box-shadow: 0 10px 30px #0006;
+  box-shadow: 0 10px 30px #0003;
 }
 
 .setup {
@@ -168,8 +171,8 @@ button.primary {
   font: inherit;
   padding: 10px;
   border-radius: 8px;
-  border: 1px solid #3a5272;
-  background: #0b1824;
+  border: 1px solid #cbbfa5;
+  background: #fff;
   color: var(--text);
 }
 
@@ -245,8 +248,9 @@ button.primary {
   gap: 8px;
   padding: 12px;
   border-radius: 18px;
-  background: #0b1a2acc;
+  background: var(--seat);
   border: 3px solid transparent;
+  box-shadow: 0 4px 14px #0002;
   overflow: hidden;
   transition:
     border-color 0.2s,
@@ -293,7 +297,7 @@ button.primary {
 }
 
 .place {
-  color: var(--accent);
+  color: #b07800;
   font-weight: 800;
 }
 
@@ -341,8 +345,8 @@ button.primary {
   min-height: 36px;
   padding: 4px 6px;
   border-radius: 10px;
-  background: #0006;
-  box-shadow: inset 0 2px 6px #0008;
+  background: #d9cdb3;
+  box-shadow: inset 0 2px 6px #0004;
 }
 
 .reserve:empty {
@@ -352,7 +356,7 @@ button.primary {
 .pawn {
   width: 22px;
   height: 30px;
-  filter: drop-shadow(0 2px 1px #0009);
+  filter: drop-shadow(0 2px 1px #0007);
 }
 
 .reserve-extra {
@@ -463,7 +467,8 @@ button.primary {
     opacity 0.15s;
 }
 
-.board .state.dim {
+.board .state.dim,
+.board g.dim {
   opacity: 0.55;
 }
 
@@ -509,12 +514,17 @@ button.primary {
 }
 
 .board .leader {
-  stroke: rgba(255, 255, 255, 0.7);
+  stroke: #1f2d3a99;
   stroke-width: 1;
 }
 
 .board .anchor {
-  fill: #fff;
+  fill: #1f2d3a;
+}
+
+/* Goiás/DF: o DF é pintado por cima, sem a divisa interna */
+.board .state.merge {
+  stroke-width: 1.2;
 }
 
 .board text {
@@ -554,7 +564,7 @@ button.primary {
   max-width: 45%;
   padding: 6px 14px;
   border-radius: 14px;
-  background: #0b1a2acc;
+  background: #fbf7eee6;
   font-weight: 700;
   font-size: 0.9rem;
   pointer-events: none;
@@ -578,14 +588,14 @@ button.primary {
   height: 44px;
   padding: 0;
   font-size: 1.2rem;
-  background: #0b1a2acc;
+  background: #fbf7eee6;
 }
 
 /* ---- menu ---- */
 .overlay {
   position: fixed;
   inset: 0;
-  background: #0009;
+  background: #0005;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -755,4 +765,9 @@ button.primary {
   box-shadow:
     0 3px 6px #0008,
     0 0 0 2px var(--accent);
+}
+
+.tool.off {
+  opacity: 0.45;
+  text-decoration: line-through;
 }

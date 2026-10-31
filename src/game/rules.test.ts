@@ -16,6 +16,7 @@ import {
   INITIAL_ARMIES,
   maxAttackers,
   movableArmies,
+  movableTo,
   placeArmies,
   playersToRollForOrder,
   rollForOrder,
@@ -52,12 +53,12 @@ function stateWith(owned: Record<string, number>, phase: GameState["phase"] = "a
 }
 
 describe("createGame: sorteio dos estados", () => {
-  it("sorteia os 27 estados entre os jogadores, 1 soldado em cada", () => {
+  it("sorteia os 26 territórios entre os jogadores, 1 soldado em cada", () => {
     const game = createGame(map, players, seq(0.3, 0.7, 0.1, 0.9));
-    expect(Object.keys(game.territories)).toHaveLength(27);
+    expect(Object.keys(game.territories)).toHaveLength(26);
     expect(Object.values(game.territories).every((t) => t!.armies === 1)).toBe(true);
     const counts = players.map((p) => territoriesOf(game, p.id).length).sort();
-    expect(counts).toEqual([13, 14]);
+    expect(counts).toEqual([13, 13]);
     expect(game.phase).toBe("order");
   });
 
@@ -65,7 +66,7 @@ describe("createGame: sorteio dos estados", () => {
     const four = [1, 2, 3, 4].map((n) => ({ id: `p${n}`, name: `P${n}`, color: "#000" }));
     const game = createGame(map, four, seq(0.42, 0.13, 0.77));
     const counts = four.map((p) => territoriesOf(game, p.id).length).sort();
-    expect(counts).toEqual([6, 7, 7, 7]);
+    expect(counts).toEqual([6, 6, 7, 7]);
   });
 
   it("aceita de 2 a 4 jogadores", () => {
@@ -190,12 +191,11 @@ describe("cartas de troca", () => {
     symbol,
   });
 
-  it("baralho tem 27 estados (9 de cada símbolo) e 2 coringas", () => {
+  it("baralho tem 1 carta por território (símbolos alternados) e 2 coringas", () => {
     const deck = createDeck(map);
-    expect(deck).toHaveLength(29);
-    for (const s of ["square", "triangle", "circle"] as const) {
-      expect(deck.filter((c) => c.symbol === s)).toHaveLength(9);
-    }
+    expect(deck).toHaveLength(28);
+    const count = (sym: Card["symbol"]) => deck.filter((c) => c.symbol === sym).length;
+    expect([count("square"), count("triangle"), count("circle")]).toEqual([9, 9, 8]);
     expect(deck.filter((c) => c.symbol === "joker")).toHaveLength(2);
   });
 
@@ -214,12 +214,22 @@ describe("cartas de troca", () => {
     expect([0, 1, 2, 3, 4, 5, 6, 7].map(tradeValue)).toEqual([4, 6, 8, 10, 12, 15, 20, 25]);
   });
 
-  it("quem conquista um estado ganha uma carta, visível no estado da partida", () => {
-    const result = attack(stateWith({ sp: 5 }), map, "sp", "mg", seq(0.99, 0.99, 0.99, 0), 3);
+  it("no máximo uma carta por turno, no fim do turno, para quem conquistou", () => {
+    // conquista MG e depois RJ no mesmo turno
+    let result = attack(stateWith({ sp: 9 }), map, "sp", "mg", seq(0.99, 0.99, 0.99, 0), 3);
     expect(result.conquered).toBe(true);
-    expect(result.card).not.toBeNull();
-    expect(result.state.hands.a).toHaveLength(1);
-    expect(result.state.deck).toHaveLength(28);
+    expect(result.state.hands.a).toHaveLength(0); // a carta vem no fim do turno
+    result = attack(result.state, map, "sp", "rj", seq(0.99, 0.99, 0.99, 0), 3);
+    expect(result.conquered).toBe(true);
+    const next = endTurn(result.state, map);
+    expect(next.hands.a).toHaveLength(1);
+    expect(next.deck).toHaveLength(27);
+    expect(next.conqueredThisTurn).toBe(false);
+  });
+
+  it("sem conquista no turno, não ganha carta", () => {
+    const next = endTurn(stateWith({ sp: 9 }), map);
+    expect(next.hands.a).toHaveLength(0);
   });
 
   it("troca dá soldados e +2 em cada estado das cartas que o jogador domina", () => {
@@ -285,7 +295,7 @@ describe("cartas de troca", () => {
     };
     const result = attack(state, map, "sp", "mg", seq(0.99, 0.99, 0));
     expect(result.eliminated).toBe("b");
-    expect(result.state.hands.a).toHaveLength(3); // 2 do eliminado + 1 da conquista
+    expect(result.state.hands.a).toHaveLength(2); // as 2 cartas do eliminado
   });
 });
 
@@ -340,6 +350,17 @@ describe("remanejamento", () => {
     const next = fortify(state, map, "sp", "pr", 3);
     expect(next.territories.pr!.armies).toBe(4);
     expect(() => fortify(state, map, "sp", "pr", 4)).toThrow();
+  });
+
+  it("no máximo 3 soldados para cada vizinho, sem deixar estado vazio", () => {
+    let state = endAttackPhase(stateWith({ sp: 9, mg: 1, rj: 1, pr: 1 }));
+    state = fortify(state, map, "sp", "mg", 3);
+    expect(() => fortify(state, map, "sp", "mg", 1)).toThrow(); // já foram 3 para MG
+    state = fortify(state, map, "sp", "rj", 3);
+    state = fortify(state, map, "sp", "pr", 2);
+    expect(state.territories.sp!.armies).toBe(1);
+    expect(() => fortify(state, map, "sp", "pr", 1)).toThrow(); // sobraria 0
+    expect(movableTo(state, "sp", "pr")).toBe(0);
   });
 
   it("soldado remanejado não se move de novo no mesmo turno", () => {

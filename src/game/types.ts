@@ -95,5 +95,9 @@ export interface GameState {
   pendingReinforcements: number;
   /** Soldados que chegaram por remanejamento neste turno (não podem se mover de novo). */
   fortified: Partial<Record<TerritoryId, number>>;
+  /** Soldados remanejados neste turno por par "origem>destino" (máximo 3 por vizinho). */
+  fortifyMoves: Partial<Record<string, number>>;
+  /** Conquistou algum estado neste turno? (dá direito a 1 carta no fim do turno) */
+  conqueredThisTurn: boolean;
   winner: PlayerId | null;
 }

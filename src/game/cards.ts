@@ -7,7 +7,7 @@ import type { Card, CardSymbol, GameMap } from "./types";
 export const JOKERS = 2;
 const SYMBOLS: CardSymbol[] = ["square", "triangle", "circle"];
 
-/** Baralho completo: 27 estados (9 de cada símbolo) + 2 coringas. */
+/** Baralho completo: uma carta por território (26, símbolos alternados) + 2 coringas. */
 export function createDeck(map: GameMap): Card[] {
   const cards: Card[] = map.territories.map((t, i) => ({
     id: t.id,

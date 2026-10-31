@@ -6,14 +6,15 @@ Valores marcados com ⚙️ são configuráveis no código (`src/game/rules.ts` 
 ## Regras do jogo
 
 1. **Jogadores:** escolhe-se de **2 a 4 jogadores** e o nome de cada um.
-2. **Sorteio dos estados:** os 27 estados (26 + DF) são **sorteados** entre os jogadores, o mais
-   igualmente possível, com **1 soldado** em cada.
+2. **Sorteio dos territórios:** os **26 territórios** — os estados, com **Goiás e Distrito Federal
+   juntos como "Goiás/DF"** — são **sorteados** entre os jogadores, o mais igualmente possível,
+   com **1 soldado** em cada.
 
-   | Jogadores | Estados por jogador |
-   | --------- | ------------------- |
-   | 2         | 14, 13              |
-   | 3         | 9, 9, 9             |
-   | 4         | 7, 7, 7, 6          |
+   | Jogadores | Territórios por jogador |
+   | --------- | ----------------------- |
+   | 2         | 13, 13                  |
+   | 3         | 9, 9, 8                 |
+   | 4         | 7, 7, 6, 6              |
 
 3. **Ordem de jogo:** cada jogador rola um dado; quem tirar mais começa, e a ordem segue do maior
    para o menor. Empatados rolam de novo entre si. **Toda a partida segue essa ordem.**
@@ -36,10 +37,17 @@ Valores marcados com ⚙️ são configuráveis no código (`src/game/rules.ts` 
    Antes de rolar o ataque, o atacante ainda pode desistir.
 
 7. **Conquista:** se o estado atacado fica sem soldados, ele passa para o atacante, e os soldados
-   que atacaram e sobreviveram entram nele. **Cada conquista vale uma carta** (veja abaixo).
+   que atacaram e sobreviveram entram nele. Quem conquistar pelo menos um estado no turno ganha
+   **uma carta** no fim do turno (veja abaixo).
 8. **Remanejamento** (opcional): depois dos ataques, o jogador pode mover soldados entre estados
-   seus que fazem fronteira, deixando pelo menos 1 em cada. Soldado remanejado não se move de novo
-   no mesmo turno.
+   seus que fazem fronteira:
+   - no máximo **3 soldados** ⚙️ de um estado **para cada vizinho**, por turno;
+   - nenhum estado fica vazio: sempre fica **pelo menos 1 soldado**;
+   - soldado remanejado não se move de novo no mesmo turno.
+
+   Exemplo: um estado com 9 soldados pode mandar 3 para um vizinho, 3 para outro e 2 para um
+   terceiro, ficando com 1.
+
 9. **Reforço:** a partir da **rodada 2**, no começo da sua vez, o jogador ganha **1 soldado a cada
    2 estados** ⚙️ que possui, mais o bônus de cada região que dominar inteira, e pode **trocar
    cartas** por mais soldados.
@@ -51,7 +59,7 @@ Valores marcados com ⚙️ são configuráveis no código (`src/game/rules.ts` 
 | ------------ | ---------------------------------- | ---- | ----- |
 | Norte        | AC, AM, AP, PA, RO, RR, TO         | 7    | +5    |
 | Nordeste     | AL, BA, CE, MA, PB, PE, PI, RN, SE | 9    | +5    |
-| Centro-Oeste | DF, GO, MS, MT                     | 4    | +3    |
+| Centro-Oeste | GO/DF, MS, MT                      | 3    | +3    |
 | Sudeste      | ES, MG, RJ, SP                     | 4    | +3    |
 | Sul          | PR, RS, SC                         | 3    | +2    |
 
@@ -60,10 +68,11 @@ Valores marcados com ⚙️ são configuráveis no código (`src/game/rules.ts` 
 Como no War original, com uma diferença: **as cartas ficam visíveis para todos**, no canto de cada
 jogador.
 
-- O baralho tem **29 cartas**: uma para cada estado, com um símbolo — **quadrado ■, triângulo ▲ ou
-  bola ●** (9 de cada) — e **2 coringas ★**.
-- **Toda vez que conquista um estado, o jogador ganha uma carta** do monte. Quando o monte acaba,
-  as cartas já trocadas são embaralhadas e voltam a ser o monte.
+- O baralho tem **28 cartas**: uma para cada território, com um símbolo — **quadrado ■, triângulo ▲
+  ou bola ●** (9, 9 e 8) — e **2 coringas ★**.
+- Como no War: quem **conquistar pelo menos um estado no turno** ganha **uma carta** do monte no
+  **fim do turno** — no máximo uma por turno, não importa quantas conquistas. Quando o monte
+  acaba, as cartas já trocadas são embaralhadas e voltam a ser o monte.
 - **Troca:** com **3 cartas de símbolos iguais** ou **3 cartas de símbolos diferentes**, o jogador
   pode trocá-las por soldados no início da sua vez (fase de reforço). O coringa vale qualquer
   símbolo.
@@ -77,9 +86,9 @@ jogador.
 ## Configurações da mesa (tablet)
 
 - **Mapa no centro, sem bordas**, sobre o "mar" que ocupa a tela toda.
-- **Jogadores nos 4 cantos do tablet**, como num tabuleiro físico sobre a mesa. Os jogadores do lado
-  de cima veem o seu canto **virado para eles** (girado 180°). Com 2 jogadores, eles ficam em cantos
-  opostos, frente a frente.
+- **Jogadores nos 4 cantos do tablet**, como num tabuleiro físico sobre a mesa: o **1º e o 2º
+  jogador embaixo** (esquerda e direita) e o **3º e o 4º em cima** (direita e esquerda). Os de cima
+  veem o seu canto **virado para eles** (girado 180°).
 - **Dados como se fossem físicos**, no canto de cada jogador: **vermelho ataca, amarelo defende**.
   Cada um rola o seu, no seu lado. Eles chacoalham antes de parar; os que perderam a comparação
   ficam apagados. Quem está sendo atacado tem o canto aceso em amarelo.
@@ -87,7 +96,14 @@ jogador.
 - **Soldadinhos como peças físicas**, na borda de cada jogador: os soldados ainda a posicionar
   ficam ali e vão saindo conforme são colocados no mapa.
 - O canto do jogador da vez fica aceso na cor dele, com as instruções e os botões da jogada.
-- Botões de **tela cheia** (⛶) e **menu** (☰: regras, bônus, histórico e nova partida) sobre o mapa.
+- **Cores claras:** mar azul-claro e cantos cor de papel.
+- **Sons** gerados pelo próprio jogo: dados rolando, soldadinho posto, rufar ao declarar ataque,
+  clarim na conquista, pancada quando a defesa segura, estrondo na eliminação, cartas, chamada de
+  trompa ao passar a vez e fanfarra na vitória.
+- **Música de fundo** em loop: trilhas originais de marcha militar (caixa, bumbo, tímpanos e
+  metais), que se alternam a cada poucas repetições.
+- Botões sobre o mapa: **🎵 música** e **🔊 efeitos** (liga/desliga, fica salvo no aparelho),
+  **⛶ tela cheia** e **☰ menu** (regras, bônus, histórico e nova partida).
 - O celular terá um layout próprio depois.
 
 ## Em aberto (para decidir)
@@ -97,6 +113,4 @@ jogador.
       dados do mapa (`coastIndex`) caso a ideia volte de outra forma.
 - [ ] **Bônus por região:** manter? (a regra "1 soldado a cada 2 estados" foi aplicada junto com ele)
 - [ ] **Mínimo de reforço:** hoje, quem tem só 1 estado e nenhuma região não recebe soldados.
-- [ ] **Cartas:** uma carta por conquista (como pedido) pode render várias cartas por turno; no War
-      original é no máximo uma por turno. Manter assim?
 - [ ] **Objetivos**, como no War clássico?

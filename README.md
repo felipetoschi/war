@@ -1,13 +1,14 @@
 # Domínio · Brasil
 
 Jogo de estratégia por turnos, de conquista de territórios, para jogar **no tablet, sobre a mesa**,
-no **mapa do Brasil** — 26 estados + Distrito Federal, agrupados nas 5 regiões.
+no **mapa do Brasil** — 26 territórios (os estados, com Goiás/DF juntos), nas 5 regiões.
 
-- De **2 a 4 jogadores**, cada um num canto do tablet (os de cima veem o seu canto virado para eles).
-- Os 27 estados são **sorteados**; depois, **dados** decidem a ordem de jogo.
+- De **2 a 4 jogadores**, cada um num canto do tablet: 1º e 2º embaixo, 3º e 4º em cima (virados para eles).
+- Os territórios são **sorteados**; depois, **dados** decidem a ordem de jogo.
 - Rodada inicial com **3 soldados** para cada; ataque escolhendo origem, alvo e quantos soldados.
 - **Dados como se fossem físicos** (vermelho ataca, amarelo defende): cada jogador rola o seu, no seu canto.
-- **Cartas de troca** (■ ▲ ● e coringa ★), visíveis para todos: uma por conquista, trocadas por soldados.
+- **Cartas de troca** (■ ▲ ● e coringa ★), visíveis para todos: uma por turno com conquista, trocadas por soldados.
+- **Sons e música** de marcha militar, gerados pelo próprio jogo (sem arquivos de áudio).
 - **Soldadinhos** na borda de cada jogador. Só se ataca estado que faz divisa.
 - Reforço: 1 soldado a cada 2 estados, a partir da rodada 2. **Vence o último vivo.**
 
@@ -45,6 +46,7 @@ src/
     dice.ts        # dados com pontinhos e animação de rolagem
     fullscreen.ts  # botão de tela cheia
     pieces.ts      # soldadinhos (peças) na borda de cada jogador
+    audio.ts       # efeitos sonoros e trilhas de marcha, gerados com a Web Audio API
   main.ts          # interface (mapa em SVG)
   style.css
 ```

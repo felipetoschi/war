@@ -1,7 +1,7 @@
 import type { GameMap, Territory } from "./types";
 
 /**
- * Mapa do Brasil: 26 estados + Distrito Federal, agrupados nas 5 regiões.
+ * Mapa do Brasil: 26 territórios (os estados, com Goiás e DF juntos), nas 5 regiões.
  * `neighbors` são as fronteiras terrestres reais.
  * `coastIndex` ordena os 17 estados litorâneos de norte a sul.
  */
@@ -76,19 +76,19 @@ const territories: Territory[] = [
     neighbors: ["mt", "go", "mg", "sp", "pr"],
   },
   {
+    // Goiás e Distrito Federal formam um território só.
     id: "go",
-    name: "Goiás",
+    name: "Goiás/DF",
     region: "centro-oeste",
-    neighbors: ["mt", "to", "ba", "mg", "ms", "df"],
+    neighbors: ["mt", "to", "ba", "mg", "ms"],
   },
-  { id: "df", name: "Distrito Federal", region: "centro-oeste", neighbors: ["go", "mg"] },
 
   // Sudeste
   {
     id: "mg",
     name: "Minas Gerais",
     region: "sudeste",
-    neighbors: ["ba", "go", "df", "ms", "sp", "rj", "es"],
+    neighbors: ["ba", "go", "ms", "sp", "rj", "es"],
   },
   {
     id: "es",
