@@ -2,12 +2,18 @@ version: 2
 updates:
   - package-ecosystem: npm
     directory: /
+    target-branch: main
     schedule:
       interval: weekly
     groups:
       dev-dependencies:
         dependency-type: development
+    ignore:
+      # Os tipos do Node acompanham a versão usada no projeto (.nvmrc).
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
+    target-branch: main
     schedule:
       interval: monthly

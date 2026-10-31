@@ -48,9 +48,19 @@ partidas online e jogadores controlados por IA.
 
 - **CI** (`.github/workflows/ci.yml`): formatação, tipos, testes e build em todo push na `main` e em PRs.
 - **Deploy** (`.github/workflows/deploy.yml`): publica o jogo no GitHub Pages a cada push na `main`.
-  Ative em _Settings → Pages → Build and deployment → Source: **GitHub Actions**_.
-- **Dependabot**: atualizações semanais de dependências e mensais das Actions.
+- **Dependabot**: PRs semanais de dependências npm e mensais das Actions, sempre contra a `main`.
+- **CODEOWNERS**: @felipetoschi é o revisor padrão.
 - Templates de issue (bug / ideia) e de pull request.
+
+### Configuração manual do repositório
+
+Ajustes que só o dono do repositório faz em _Settings_:
+
+1. **General → Default branch:** `main`.
+2. **Pages → Build and deployment → Source:** `GitHub Actions`.
+   O jogo fica em https://felipetoschi.github.io/war/.
+3. **Rules → Rulesets** (opcional): proteger a `main` exigindo PR e o check `check` do CI.
+4. **General → About** (engrenagem na página inicial): descrição, site e tópicos.
 
 ## Próximos passos
 
