@@ -50,7 +50,6 @@ export function createGame(map: GameMap, players: Player[], rng: Rng = Math.rand
   const state: GameState = {
     players,
     objectives: {},
-    huntTargets: {},
     eliminatedBy: {},
     winReason: null,
     hands: Object.fromEntries(players.map((p) => [p.id, []])),

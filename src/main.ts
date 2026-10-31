@@ -3,7 +3,7 @@ import { BRASIL_MAP } from "./game/brasil";
 import { hasValidSet, isValidSet, MAX_HAND, OWNED_CARD_BONUS, tradeValue } from "./game/cards";
 import type { BattleResult } from "./game/dice";
 import { getTerritory } from "./game/map";
-import { objectiveById } from "./game/objectives";
+import { objectiveById, TERRITORY_GOAL } from "./game/objectives";
 import {
   cancelAttack,
   canAttack,
@@ -635,14 +635,10 @@ function seatObjectives(game: GameState, player: Player): string {
   if (ids.length === 0) return "";
   const items = ids
     .map((id) => {
-      const def = objectiveById(id);
+      const def = objectiveById(map, id);
       const { done, text } = def.progress(game, map, player.id);
-      const target =
-        id === "cacada" && game.huntTargets[player.id]
-          ? ` <span class="target-name">(alvo: ${nameOf(playerById(game, game.huntTargets[player.id]!))})</span>`
-          : "";
       return `<li class="${done ? "done" : ""}" title="${escapeHtml(def.description)}">
-        <span class="obj-title">🎯 ${def.title}${target}</span>
+        <span class="obj-title">🎯 ${def.title}</span>
         <span class="obj-progress">${text}</span>
       </li>`;
     })
@@ -652,7 +648,7 @@ function seatObjectives(game: GameState, player: Player): string {
 
 function winText(game: GameState): string {
   if (!game.winReason || game.winReason === "ultimo-vivo") return "último jogador vivo";
-  return `objetivo "${objectiveById(game.winReason).title}"`;
+  return `objetivo "${objectiveById(map, game.winReason).title}"`;
 }
 
 function seatHand(game: GameState, player: Player): string {
@@ -761,7 +757,7 @@ function renderMenu(): string {
           <li>3 cartas iguais ou 3 diferentes valem uma troca por soldados (próxima: +${tradeValue(state.trades)}). Carta de estado seu: +${OWNED_CARD_BONUS} nele. Com ${MAX_HAND} cartas, a troca é obrigatória.</li>
           <li>Remanejar: até 3 soldados de um estado para cada vizinho, sempre deixando 1.</li>
           <li>A partir da rodada 2: 1 soldado a cada 2 estados + bônus de região.</li>
-          <li>Objetivos abertos: cada jogador tem 2 objetivos, visíveis no seu canto. Vence quem cumprir qualquer um deles na sua vez — ou quem for o último vivo.</li>
+          <li>Objetivos abertos: cada jogador tem 2, visíveis no seu canto — conquistar as regiões sorteadas ou ter ${TERRITORY_GOAL} territórios. Vence quem cumprir qualquer um na sua vez, ou o último vivo.</li>
         </ol>
         <h3>Bônus por região</h3>
         <ul class="regions">${regions}</ul>

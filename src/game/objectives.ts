@@ -1,282 +1,99 @@
 import type { GameMap, GameState, PlayerId, Rng, TerritoryId } from "./types";
 
 /**
- * Objetivos abertos: cada jogador recebe 2, visíveis para todos, e vence ao cumprir
- * qualquer um deles na sua vez. Um é "flexível" (caminho ou contagem, com várias formas
- * de cumprir) e o outro é "focado" (região ou estados-chave). Assim, os adversários sabem
- * o que você quer, mas não conseguem bloquear tudo ao mesmo tempo.
+ * Objetivos abertos, simples e intuitivos. Cada jogador tem 2 objetivos visíveis para todos
+ * e vence ao cumprir qualquer um deles na sua vez (ou ao ser o último vivo):
+ *
+ * 1. um objetivo de **região**, sorteado: conquistar 2 ou 3 regiões inteiras;
+ * 2. **ter 18 territórios** — igual para todos.
+ *
+ * Com dois caminhos para vencer, saber o objetivo do outro não trava o jogo.
  */
-export type ObjectiveGroup = "flex" | "focus";
+export type ObjectiveGroup = "region" | "common";
 
 export interface ObjectiveProgress {
   done: boolean;
-  /** Texto curto de progresso, ex.: "3/5" ou "AP ✓ · RS ✗". */
+  /** Texto curto de progresso, ex.: "7/10". */
   text: string;
-  /**
-   * Quanto ainda falta: em geral, quantos territórios ainda precisam ser conquistados
-   * (na Fortaleza, quantos territórios ainda precisam de 2 soldados). 0 = cumprido.
-   */
+  /** Quantos territórios ainda faltam conquistar (0 = cumprido). */
   missing: number;
 }
-
-/** No sorteio, só entram objetivos que ainda exigem pelo menos isto (evita começar adiantado). */
-export const MIN_MISSING_AT_DEAL = 3;
 
 export interface ObjectiveDef {
   id: string;
   group: ObjectiveGroup;
   title: string;
   description: string;
-  /** Jogadores mínimos para este objetivo entrar no sorteio. */
-  minPlayers?: number;
   progress(state: GameState, map: GameMap, player: PlayerId): ObjectiveProgress;
 }
 
-// ---- auxiliares ----
+/** Objetivo comum a todos: ter esta quantidade de territórios (de 26). */
+export const TERRITORY_GOAL = 18;
+
+/** No sorteio, só entram objetivos de região que ainda exigem pelo menos isto de conquistas. */
+export const MIN_MISSING_AT_DEAL = 3;
 
 const owns = (state: GameState, player: PlayerId, id: TerritoryId) =>
   state.territories[id]?.owner === player;
 
-const ownedCount = (state: GameState, player: PlayerId, ids: TerritoryId[]) =>
-  ids.filter((id) => owns(state, player, id)).length;
-
-const territoryCount = (state: GameState, player: PlayerId, minArmies = 1) =>
-  Object.values(state.territories).filter((t) => t?.owner === player && t.armies >= minArmies)
-    .length;
-
-/** Existe um caminho contínuo de territórios do jogador ligando `from` a algum de `to`? */
-export function connected(
-  state: GameState,
-  map: GameMap,
-  player: PlayerId,
-  from: TerritoryId,
-  to: TerritoryId[],
-): boolean {
-  if (!owns(state, player, from)) return false;
-  const goal = new Set(to);
-  const seen = new Set<TerritoryId>([from]);
-  const queue = [from];
-  while (queue.length) {
-    const id = queue.shift()!;
-    if (goal.has(id)) return true;
-    for (const n of map.territories.find((t) => t.id === id)!.neighbors) {
-      if (!seen.has(n) && owns(state, player, n)) {
-        seen.add(n);
-        queue.push(n);
-      }
-    }
-  }
-  return false;
-}
-
-/**
- * Menor número de territórios que o jogador ainda precisa conquistar para ligar `from`
- * a algum de `to` (busca 0-1: entrar num território seu custa 0; num de outro, 1).
- */
-export function territoriesToConnect(
-  state: GameState,
-  map: GameMap,
-  player: PlayerId,
-  from: TerritoryId,
-  to: TerritoryId[],
-): number {
-  const cost = (id: TerritoryId) => (owns(state, player, id) ? 0 : 1);
-  const goal = new Set(to);
-  const best = new Map<TerritoryId, number>([[from, cost(from)]]);
-  const deque: TerritoryId[] = [from];
-  while (deque.length) {
-    const id = deque.shift()!;
-    const d = best.get(id)!;
-    if (goal.has(id)) return d;
-    for (const n of map.territories.find((t) => t.id === id)!.neighbors) {
-      const nd = d + cost(n);
-      if (nd < (best.get(n) ?? Infinity)) {
-        best.set(n, nd);
-        if (cost(n) === 0) deque.unshift(n);
-        else deque.push(n);
-      }
-    }
-  }
-  return Infinity;
-}
-
-const mark = (ok: boolean) => (ok ? "✓" : "✗");
-
-function atLeast(ids: TerritoryId[], needed: number) {
-  return (state: GameState, _map: GameMap, player: PlayerId): ObjectiveProgress => {
-    const have = ownedCount(state, player, ids);
-    return {
-      done: have >= needed,
-      text: `${Math.min(have, needed)}/${needed}`,
-      missing: Math.max(0, needed - have),
-    };
+/** Objetivo: conquistar as regiões inteiras. */
+function regionsObjective(map: GameMap, regionIds: string[]): ObjectiveDef {
+  const names = regionIds.map((id) => map.regions.find((r) => r.id === id)!.name);
+  const list =
+    names.length === 2
+      ? `o ${names[0]} e o ${names[1]}`
+      : `o ${names.slice(0, -1).join(", o ")} e o ${names[names.length - 1]}`;
+  return {
+    id: regionIds.join("+"),
+    group: "region",
+    title: `Conquistar ${list}`,
+    description: `Dominar todos os estados de: ${names.join(", ")}.`,
+    progress: (state, map, player) => {
+      const ids = map.territories.filter((t) => regionIds.includes(t.region)).map((t) => t.id);
+      const have = ids.filter((id) => owns(state, player, id)).length;
+      return {
+        done: have === ids.length,
+        text: `${have}/${ids.length}`,
+        missing: ids.length - have,
+      };
+    },
   };
 }
 
-function regions(regionIds: string[], extra = 0) {
-  return (state: GameState, map: GameMap, player: PlayerId): ObjectiveProgress => {
-    const ids = map.territories.filter((t) => regionIds.includes(t.region)).map((t) => t.id);
-    const have = ownedCount(state, player, ids);
-    const total = territoryCount(state, player);
-    const regionsDone = have === ids.length;
-    const extraDone = total - ids.length >= extra;
-    const others = total - have;
-    const text = extra
-      ? `${have}/${ids.length} · mais ${Math.min(others, extra)}/${extra}`
-      : `${have}/${ids.length}`;
-    const missing = ids.length - have + Math.max(0, extra - others);
-    return { done: regionsDone && extraDone, text, missing };
+function territoryObjective(): ObjectiveDef {
+  return {
+    id: "territorios",
+    group: "common",
+    title: `Ter ${TERRITORY_GOAL} territórios`,
+    description: `Ter ${TERRITORY_GOAL} dos 26 territórios do mapa, quaisquer que sejam.`,
+    progress: (state, _map, player) => {
+      const have = Object.values(state.territories).filter((t) => t?.owner === player).length;
+      return {
+        done: have >= TERRITORY_GOAL,
+        text: `${Math.min(have, TERRITORY_GOAL)}/${TERRITORY_GOAL}`,
+        missing: Math.max(0, TERRITORY_GOAL - have),
+      };
+    },
   };
 }
 
-const COASTAL = (map: GameMap) =>
-  map.territories.filter((t) => t.coastIndex !== undefined).map((t) => t.id);
-const NORTHEAST_COAST = ["ma", "pi", "ce", "rn", "pb", "pe", "al", "se", "ba"];
-const AMAZONIA_LEGAL = ["ac", "am", "ap", "pa", "ro", "rr", "to", "mt", "ma"];
-const INTERNATIONAL_BORDER = ["ac", "am", "rr", "pa", "ap", "ro", "mt", "ms", "pr", "sc", "rs"];
-
-/** Território-alvo de quem tem o objetivo de caçada, se o alvo cair por outra mão. */
-export const HUNT_FALLBACK = 16;
-
-// ---- objetivos ----
-
-export const OBJECTIVES: ObjectiveDef[] = [
-  // Flexíveis: caminhos e contagens
-  {
-    id: "oiapoque-chui",
-    group: "flex",
-    title: "Do Oiapoque ao Chuí",
-    description: "Ligar o Amapá ao Rio Grande do Sul por estados seus, sem interrupção.",
-    progress: (state, map, player) => ({
-      done: connected(state, map, player, "ap", ["rs"]),
-      text: `AP ${mark(owns(state, player, "ap"))} · RS ${mark(owns(state, player, "rs"))}`,
-      missing: territoriesToConnect(state, map, player, "ap", ["rs"]),
-    }),
-  },
-  {
-    id: "litoral-a-litoral",
-    group: "flex",
-    title: "Do Acre ao mar",
-    description:
-      "Ligar o Acre a qualquer estado do litoral do Nordeste por estados seus, sem interrupção.",
-    progress: (state, map, player) => ({
-      done: connected(state, map, player, "ac", NORTHEAST_COAST),
-      text: `AC ${mark(owns(state, player, "ac"))} · litoral NE ${ownedCount(state, player, NORTHEAST_COAST)}`,
-      missing: territoriesToConnect(state, map, player, "ac", NORTHEAST_COAST),
-    }),
-  },
-  {
-    id: "senhor-da-costa",
-    group: "flex",
-    title: "Senhor da costa",
-    description: "Dominar 10 dos 17 estados do litoral.",
-    progress: (state, map, player) => atLeast(COASTAL(map), 10)(state, map, player),
-  },
-  {
-    id: "ocupacao",
-    group: "flex",
-    title: "Ocupação",
-    description: `Ter ${HUNT_FALLBACK} dos 26 territórios.`,
-    progress: (state, _map, player) => {
-      const have = territoryCount(state, player);
-      return {
-        done: have >= HUNT_FALLBACK,
-        text: `${Math.min(have, HUNT_FALLBACK)}/${HUNT_FALLBACK}`,
-        missing: Math.max(0, HUNT_FALLBACK - have),
-      };
-    },
-  },
-  {
-    id: "fortaleza",
-    group: "flex",
-    title: "Fortaleza",
-    description: "Ter 12 territórios com pelo menos 2 soldados em cada.",
-    progress: (state, _map, player) => {
-      const have = territoryCount(state, player, 2);
-      return {
-        done: have >= 12,
-        text: `${Math.min(have, 12)}/12`,
-        missing: Math.max(0, 12 - have),
-      };
-    },
-  },
-
-  // Focados: regiões e estados-chave
-  {
-    id: "sao-francisco",
-    group: "focus",
-    title: "Rio São Francisco",
-    description: "Dominar MG, BA, PE, AL e SE ao mesmo tempo.",
-    progress: atLeast(["mg", "ba", "pe", "al", "se"], 5),
-  },
-  {
-    id: "amazonia-legal",
-    group: "focus",
-    title: "Amazônia Legal",
-    description: "Dominar 7 dos 9 estados da Amazônia Legal (AC, AM, AP, PA, RO, RR, TO, MT, MA).",
-    progress: atLeast(AMAZONIA_LEGAL, 7),
-  },
-  {
-    id: "eixo-do-poder",
-    group: "focus",
-    title: "Eixo do poder",
-    description: "Dominar SP, RJ, MG e Goiás/DF ao mesmo tempo.",
-    progress: atLeast(["sp", "rj", "mg", "go"], 4),
-  },
-  {
-    id: "fronteiras",
-    group: "focus",
-    title: "Guardião das fronteiras",
-    description: "Dominar 8 dos 11 estados que fazem fronteira com outros países.",
-    progress: atLeast(INTERNATIONAL_BORDER, 8),
-  },
-  {
-    id: "nordeste-sul",
-    group: "focus",
-    title: "Nordeste e Sul",
-    description: "Dominar o Nordeste e o Sul inteiros.",
-    progress: regions(["nordeste", "sul"]),
-  },
-  {
-    id: "norte-centro-oeste",
-    group: "focus",
-    title: "Norte e Centro-Oeste",
-    description: "Dominar o Norte e o Centro-Oeste inteiros.",
-    progress: regions(["norte", "centro-oeste"]),
-  },
-  {
-    id: "sudeste-sul",
-    group: "focus",
-    title: "Sudeste e Sul + 3",
-    description: "Dominar o Sudeste e o Sul inteiros e mais 3 territórios quaisquer.",
-    progress: regions(["sudeste", "sul"], 3),
-  },
-  {
-    id: "cacada",
-    group: "focus",
-    title: "Caçada",
-    description: `Eliminar o jogador indicado. Se outro jogador eliminá-lo antes, o objetivo vira ter ${HUNT_FALLBACK} territórios.`,
-    minPlayers: 3,
-    progress: (state, _map, player) => {
-      const target = state.huntTargets[player];
-      const killer = target ? state.eliminatedBy[target] : undefined;
-      if (killer === player) return { done: true, text: "alvo eliminado ✓", missing: 0 };
-      if (target && killer === undefined) {
-        const left = territoryCount(state, target);
-        return { done: false, text: `alvo com ${left} território(s)`, missing: left };
-      }
-      const have = territoryCount(state, player);
-      return {
-        done: have >= HUNT_FALLBACK,
-        text: `alvo caiu: ${Math.min(have, HUNT_FALLBACK)}/${HUNT_FALLBACK}`,
-        missing: Math.max(0, HUNT_FALLBACK - have),
-      };
-    },
-  },
+/** Combinações de regiões sorteadas como objetivo (entre 10 e 13 territórios cada). */
+export const REGION_GOALS: string[][] = [
+  ["norte", "sul"],
+  ["norte", "centro-oeste"],
+  ["norte", "sudeste"],
+  ["nordeste", "sul"],
+  ["nordeste", "centro-oeste"],
+  ["nordeste", "sudeste"],
+  ["sudeste", "sul", "centro-oeste"],
 ];
 
-export function objectiveById(id: string): ObjectiveDef {
-  const def = OBJECTIVES.find((o) => o.id === id);
+export function allObjectives(map: GameMap): ObjectiveDef[] {
+  return [...REGION_GOALS.map((r) => regionsObjective(map, r)), territoryObjective()];
+}
+
+export function objectiveById(map: GameMap, id: string): ObjectiveDef {
+  const def = allObjectives(map).find((o) => o.id === id);
   if (!def) throw new Error(`Objetivo desconhecido: ${id}`);
   return def;
 }
@@ -288,7 +105,7 @@ export function completedObjective(
   player: PlayerId,
 ): ObjectiveDef | null {
   for (const id of state.objectives[player] ?? []) {
-    const def = objectiveById(id);
+    const def = objectiveById(map, id);
     if (def.progress(state, map, player).done) return def;
   }
   return null;
@@ -304,33 +121,21 @@ function shuffle<T>(items: T[], rng: Rng): T[] {
 }
 
 /**
- * Sorteia 2 objetivos para cada jogador (1 flexível + 1 focado), sem repetir entre
- * jogadores e evitando objetivos muito adiantados: só entram os que ainda exigem pelo
- * menos `MIN_MISSING_AT_DEAL` conquistas. Se nenhum servir, fica o menos adiantado.
- * Na caçada, o alvo é o próximo jogador na roda.
+ * Sorteia o objetivo de região de cada jogador (sem repetir entre jogadores e sem começar
+ * adiantado: faltam pelo menos `MIN_MISSING_AT_DEAL` conquistas) e dá a todos o objetivo
+ * comum de ter `TERRITORY_GOAL` territórios.
  */
 export function dealObjectives(state: GameState, map: GameMap, rng: Rng): void {
-  const playerIds = state.players.map((p) => p.id);
-  const available = OBJECTIVES.filter((o) => (o.minPlayers ?? 0) <= playerIds.length);
-  const pools: Record<ObjectiveGroup, ObjectiveDef[]> = {
-    flex: shuffle(
-      available.filter((o) => o.group === "flex"),
-      rng,
-    ),
-    focus: shuffle(
-      available.filter((o) => o.group === "focus"),
-      rng,
-    ),
-  };
-  playerIds.forEach((player, i) => {
-    state.huntTargets[player] = playerIds[(i + 1) % playerIds.length]!;
-    state.objectives[player] = (["flex", "focus"] as const).map((group) => {
-      const pool = pools[group];
-      const missing = pool.map((o) => o.progress(state, map, player).missing);
-      let index = missing.findIndex((m) => m >= MIN_MISSING_AT_DEAL);
-      if (index === -1) index = missing.indexOf(Math.max(...missing));
-      const [chosen] = pool.splice(index, 1);
-      return chosen!.id;
-    });
-  });
+  const pool = shuffle(
+    allObjectives(map).filter((o) => o.group === "region"),
+    rng,
+  );
+  const common = territoryObjective();
+  for (const { id: player } of state.players) {
+    const missing = pool.map((o) => o.progress(state, map, player).missing);
+    let index = missing.findIndex((m) => m >= MIN_MISSING_AT_DEAL);
+    if (index === -1) index = missing.indexOf(Math.max(...missing));
+    const [region] = pool.splice(index, 1);
+    state.objectives[player] = [region!.id, common.id];
+  }
 }

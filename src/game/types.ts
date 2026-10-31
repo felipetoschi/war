@@ -78,8 +78,6 @@ export interface GameState {
   players: Player[];
   /** Os 2 objetivos abertos de cada jogador (ids de `OBJECTIVES`). */
   objectives: Record<PlayerId, string[]>;
-  /** Alvo de cada jogador no objetivo de caçada. */
-  huntTargets: Partial<Record<PlayerId, PlayerId>>;
   /** Quem eliminou cada jogador eliminado. */
   eliminatedBy: Partial<Record<PlayerId, PlayerId>>;
   /** Como o vencedor ganhou: id do objetivo cumprido, ou "ultimo-vivo". */

@@ -57,35 +57,29 @@ Valores marcados com ⚙️ são configuráveis no código (`src/game/rules.ts` 
 
 ### Objetivos abertos 🎯
 
-Cada jogador recebe **2 objetivos**, sorteados no começo e **visíveis para todos** no seu canto, com
-o progresso de cada um. Basta cumprir **um** deles. Como os adversários não conseguem bloquear os
-dois caminhos ao mesmo tempo, saber o objetivo do outro vira estratégia — e não trava o jogo.
+Simples e visíveis para todos. Cada jogador tem **2 objetivos** no seu canto, com o progresso, e
+vence ao cumprir **qualquer um** deles na sua vez:
 
-- Um objetivo é **flexível** (caminho ou contagem, com várias formas de cumprir) e o outro é
-  **focado** (região ou estados-chave).
-- Ninguém recebe o mesmo objetivo de outro jogador.
+1. **Um objetivo de região, sorteado** — conquistar regiões inteiras:
+
+   | Objetivo                                     | Territórios |
+   | -------------------------------------------- | ----------- |
+   | Conquistar o Norte e o Sul                   | 10          |
+   | Conquistar o Norte e o Centro-Oeste          | 10          |
+   | Conquistar o Norte e o Sudeste               | 11          |
+   | Conquistar o Nordeste e o Sul                | 12          |
+   | Conquistar o Nordeste e o Centro-Oeste       | 12          |
+   | Conquistar o Nordeste e o Sudeste            | 13          |
+   | Conquistar o Sudeste, o Sul e o Centro-Oeste | 10          |
+
+2. **Ter 18 territórios** ⚙️ (de 26) — igual para todos.
+
+- O **último vivo** também vence.
+- Ninguém recebe o mesmo objetivo de região de outro jogador.
 - **Nada de objetivo adiantado:** no sorteio, só entram objetivos que ainda exigem **pelo menos 3
-  conquistas** ⚙️ (nos caminhos, conta o menor número de estados a conquistar para ligar as pontas;
-  na Fortaleza, quantos territórios ainda precisam de 2 soldados).
-- **"Último vivo"** continua valendo como vitória.
-
-| Tipo     | Objetivo                    | Como cumprir                                                           |
-| -------- | --------------------------- | ---------------------------------------------------------------------- |
-| Flexível | **Do Oiapoque ao Chuí**     | Ligar o Amapá ao Rio Grande do Sul por estados seus, sem interrupção   |
-| Flexível | **Do Acre ao mar**          | Ligar o Acre a qualquer estado do litoral do Nordeste por estados seus |
-| Flexível | **Senhor da costa**         | Dominar 10 dos 17 estados do litoral                                   |
-| Flexível | **Ocupação**                | Ter 16 dos 26 territórios                                              |
-| Flexível | **Fortaleza**               | Ter 12 territórios com pelo menos 2 soldados em cada                   |
-| Focado   | **Rio São Francisco**       | Dominar MG, BA, PE, AL e SE ao mesmo tempo                             |
-| Focado   | **Amazônia Legal**          | Dominar 7 de AC, AM, AP, PA, RO, RR, TO, MT e MA                       |
-| Focado   | **Eixo do poder**           | Dominar SP, RJ, MG e Goiás/DF ao mesmo tempo                           |
-| Focado   | **Guardião das fronteiras** | Dominar 8 dos 11 estados que fazem fronteira com outros países         |
-| Focado   | **Nordeste e Sul**          | Dominar as duas regiões inteiras                                       |
-| Focado   | **Norte e Centro-Oeste**    | Dominar as duas regiões inteiras                                       |
-| Focado   | **Sudeste e Sul + 3**       | Dominar as duas regiões inteiras e mais 3 territórios quaisquer        |
-| Focado   | **Caçada** (3–4 jogadores)  | Eliminar o próximo jogador da roda; se outro eliminá-lo, vira ter 16   |
-
-Os números (16 territórios, 10 do litoral etc.) ⚙️ serão calibrados com as partidas de teste.
+  conquistas** ⚙️.
+- Como existem dois caminhos para vencer, saber o objetivo do outro vira estratégia — e não trava
+  o jogo.
 
 ### Bônus por região ⚙️
 
@@ -149,5 +143,5 @@ jogador.
       retirado por enquanto — só se ataca quem faz divisa. A numeração do litoral continua nos
       dados do mapa (`coastIndex`) caso a ideia volte de outra forma.
 - [ ] **Mínimo de reforço:** hoje, quem tem só 1 estado e nenhuma região não recebe soldados.
-- [ ] **Calibrar objetivos:** ajustar os números (16 territórios, 10 do litoral, mínimo de 3
-      conquistas no sorteio etc.) depois de algumas partidas.
+- [ ] **Calibrar objetivos:** ajustar os números (18 territórios, mínimo de 3 conquistas no
+      sorteio) depois de algumas partidas.

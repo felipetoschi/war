@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { BRASIL_MAP } from "./brasil";
 import {
+  allObjectives,
   completedObjective,
-  connected,
   MIN_MISSING_AT_DEAL,
   objectiveById,
-  OBJECTIVES,
-  territoriesToConnect,
+  REGION_GOALS,
+  TERRITORY_GOAL,
 } from "./objectives";
 import { attack, createGame, placeArmies } from "./rules";
 import type { GameState, Player } from "./types";
@@ -40,16 +40,54 @@ function stateWith(owned: Record<string, number>, objectives: string[] = []): Ga
 }
 
 const progress = (state: GameState, id: string, player = "a") =>
-  objectiveById(id).progress(state, map, player);
+  objectiveById(map, id).progress(state, map, player);
+
+describe("objetivos simples", () => {
+  it("são só regiões inteiras e ter 18 territórios, com títulos claros", () => {
+    expect(allObjectives(map).map((o) => o.title)).toEqual([
+      "Conquistar o Norte e o Sul",
+      "Conquistar o Norte e o Centro-Oeste",
+      "Conquistar o Norte e o Sudeste",
+      "Conquistar o Nordeste e o Sul",
+      "Conquistar o Nordeste e o Centro-Oeste",
+      "Conquistar o Nordeste e o Sudeste",
+      "Conquistar o Sudeste, o Sul e o Centro-Oeste",
+      `Ter ${TERRITORY_GOAL} territórios`,
+    ]);
+  });
+
+  it("cada objetivo de região pede entre 10 e 13 territórios", () => {
+    for (const regions of REGION_GOALS) {
+      const size = map.territories.filter((t) => regions.includes(t.region)).length;
+      expect(size).toBeGreaterThanOrEqual(10);
+      expect(size).toBeLessThanOrEqual(13);
+    }
+  });
+
+  it("mostra o progresso de região e de territórios", () => {
+    const sul = { pr: 1, sc: 1, rs: 1 };
+    expect(progress(stateWith(sul), "norte+sul")).toEqual({
+      done: false,
+      text: "3/10",
+      missing: 7,
+    });
+    expect(progress(stateWith(sul), "territorios")).toEqual({
+      done: false,
+      text: `3/${TERRITORY_GOAL}`,
+      missing: TERRITORY_GOAL - 3,
+    });
+  });
+});
 
 describe("sorteio dos objetivos", () => {
-  it("cada jogador recebe 1 flexível e 1 focado, sem repetir entre jogadores", () => {
-    const game = createGame(map, four, seq(0.13, 0.57, 0.91, 0.32, 0.74));
-    const all = Object.values(game.objectives).flat();
-    expect(all).toHaveLength(8);
-    expect(new Set(all).size).toBe(8);
-    for (const ids of Object.values(game.objectives)) {
-      expect(ids.map((id) => objectiveById(id).group)).toEqual(["flex", "focus"]);
+  it("cada jogador recebe 1 objetivo de região (sem repetir) + ter 18 territórios", () => {
+    const game = createGame(map, four);
+    const regions = four.map((p) => game.objectives[p.id]![0]!);
+    expect(new Set(regions).size).toBe(4);
+    for (const p of four) {
+      expect(game.objectives[p.id]).toHaveLength(2);
+      expect(objectiveById(map, game.objectives[p.id]![0]!).group).toBe("region");
+      expect(game.objectives[p.id]![1]).toBe("territorios");
     }
   });
 
@@ -60,125 +98,44 @@ describe("sorteio dos objetivos", () => {
         for (const p of players) {
           expect(completedObjective(game, map, p.id)).toBeNull();
           for (const id of game.objectives[p.id]!) {
-            const { missing } = objectiveById(id).progress(game, map, p.id);
+            const { missing } = progress(game, id, p.id);
             expect(missing, `${id} para ${p.id}`).toBeGreaterThanOrEqual(MIN_MISSING_AT_DEAL);
           }
         }
       }
     }
   });
-
-  it("conta quantos territórios faltam conquistar para ligar um caminho", () => {
-    // AP → PA → MT → MS → PR → SC → RS: tem tudo menos MS e SC
-    const state = stateWith({ ap: 1, pa: 1, mt: 1, pr: 1, rs: 1 });
-    expect(territoriesToConnect(state, map, "a", "ap", ["rs"])).toBe(2);
-    expect(progress(state, "oiapoque-chui").missing).toBe(2);
-    expect(progress(stateWith({ sp: 1, rj: 1, mg: 1 }), "eixo-do-poder").missing).toBe(1);
-  });
-
-  it("caçada só entra com 3 ou mais jogadores; o alvo é o próximo da roda", () => {
-    for (let i = 0; i < 20; i++) {
-      const game = createGame(map, two);
-      expect(Object.values(game.objectives).flat()).not.toContain("cacada");
-    }
-    const game = createGame(map, four);
-    expect(game.huntTargets).toEqual({ p1: "p2", p2: "p3", p3: "p4", p4: "p1" });
-    expect(OBJECTIVES.find((o) => o.id === "cacada")!.minPlayers).toBe(3);
-  });
-});
-
-describe("caminhos", () => {
-  // AP → PA → MT → MS → PR → SC → RS
-  const path = { ap: 1, pa: 1, mt: 1, ms: 1, pr: 1, sc: 1, rs: 1 };
-
-  it("do Oiapoque ao Chuí: precisa de um caminho contínuo de AP a RS", () => {
-    expect(progress(stateWith(path), "oiapoque-chui").done).toBe(true);
-    const broken = { ...path };
-    delete (broken as Record<string, number>).ms;
-    expect(progress(stateWith(broken), "oiapoque-chui")).toEqual({
-      done: false,
-      text: "AP ✓ · RS ✓",
-      missing: 1,
-    });
-  });
-
-  it("do Acre ao mar: liga o Acre a um estado do litoral do Nordeste", () => {
-    const state = stateWith({ ac: 1, am: 1, pa: 1, ma: 1 });
-    expect(connected(state, map, "a", "ac", ["ma"])).toBe(true);
-    expect(progress(state, "litoral-a-litoral").done).toBe(true);
-  });
-});
-
-describe("contagens e regiões", () => {
-  it("Senhor da costa: 10 dos 17 estados do litoral", () => {
-    const coast = map.territories.filter((t) => t.coastIndex !== undefined).map((t) => t.id);
-    const nine = Object.fromEntries(coast.slice(0, 9).map((id) => [id, 1]));
-    expect(progress(stateWith(nine), "senhor-da-costa")).toEqual({
-      done: false,
-      text: "9/10",
-      missing: 1,
-    });
-    const ten = Object.fromEntries(coast.slice(0, 10).map((id) => [id, 1]));
-    expect(progress(stateWith(ten), "senhor-da-costa").done).toBe(true);
-  });
-
-  it("Fortaleza: 12 territórios com 2 ou mais soldados", () => {
-    const ids = map.territories.slice(0, 12).map((t) => t.id);
-    const weak = Object.fromEntries(ids.map((id, i) => [id, i === 0 ? 1 : 2]));
-    expect(progress(stateWith(weak), "fortaleza").done).toBe(false);
-    const strong = Object.fromEntries(ids.map((id) => [id, 2]));
-    expect(progress(stateWith(strong), "fortaleza").done).toBe(true);
-  });
-
-  it("Sudeste e Sul + 3: as duas regiões inteiras e mais 3 territórios", () => {
-    const regions = { es: 1, mg: 1, rj: 1, sp: 1, pr: 1, sc: 1, rs: 1 };
-    expect(progress(stateWith(regions), "sudeste-sul")).toEqual({
-      done: false,
-      text: "7/7 · mais 0/3",
-      missing: 3,
-    });
-    const plus = { ...regions, ba: 1, go: 1, ms: 1 };
-    expect(progress(stateWith(plus), "sudeste-sul").done).toBe(true);
-  });
-
-  it("Eixo do poder: SP, RJ, MG e Goiás/DF", () => {
-    expect(progress(stateWith({ sp: 1, rj: 1, mg: 1 }), "eixo-do-poder").text).toBe("3/4");
-    expect(progress(stateWith({ sp: 1, rj: 1, mg: 1, go: 1 }), "eixo-do-poder").done).toBe(true);
-  });
 });
 
 describe("vitória por objetivo", () => {
-  it("vence ao cumprir um objetivo com uma conquista, na própria vez", () => {
-    // tem SP, RJ e GO; conquista MG → Eixo do poder
-    const state = stateWith({ sp: 5, rj: 1, go: 1 }, ["ocupacao", "eixo-do-poder"]);
-    const result = attack(state, map, "sp", "mg", seq(0.99, 0.99, 0.99, 0), 3);
+  it("vence ao conquistar as regiões do objetivo, na própria vez", () => {
+    // tem o Norte inteiro, PR e SC; conquista RS → Norte e Sul
+    const norte = Object.fromEntries(
+      map.territories.filter((t) => t.region === "norte").map((t) => [t.id, 1]),
+    );
+    const state = stateWith({ ...norte, pr: 1, sc: 5 }, ["norte+sul", "territorios"]);
+    const result = attack(state, map, "sc", "rs", seq(0.99, 0.99, 0.99, 0), 3);
     expect(result.state.winner).toBe("a");
-    expect(result.state.winReason).toBe("eixo-do-poder");
+    expect(result.state.winReason).toBe("norte+sul");
     expect(result.state.phase).toBe("finished");
   });
 
-  it("vence ao cumprir um objetivo posicionando soldados", () => {
-    const ids = map.territories.slice(0, 12).map((t) => t.id);
-    const owned = Object.fromEntries(ids.map((id, i) => [id, i === 0 ? 1 : 2]));
+  it("vence ao chegar a 18 territórios", () => {
+    const ids = map.territories.map((t) => t.id).filter((id) => id !== "mg" && id !== "sp");
+    const owned = Object.fromEntries(ids.slice(0, TERRITORY_GOAL - 2).map((id) => [id, 1]));
+    owned.sp = 5;
+    const state = stateWith(owned, ["nordeste+sudeste", "territorios"]);
+    const result = attack(state, map, "sp", "mg", seq(0.99, 0.99, 0.99, 0), 3);
+    expect(result.state.winner).toBe("a");
+    expect(result.state.winReason).toBe("territorios");
+  });
+
+  it("posicionar soldados não cumpre objetivo (só conquistando)", () => {
     const state = {
-      ...stateWith(owned, ["fortaleza", "eixo-do-poder"]),
+      ...stateWith({ sp: 1 }, ["norte+sul", "territorios"]),
       phase: "reinforce" as const,
       pendingReinforcements: 2,
     };
-    const next = placeArmies(state, map, ids[0]!, 1);
-    expect(next.winner).toBe("a");
-    expect(next.winReason).toBe("fortaleza");
-  });
-
-  it("caçada: se outro jogador elimina o alvo, vale ter 16 territórios", () => {
-    const base = createGame(map, four);
-    const state: GameState = {
-      ...base,
-      huntTargets: { p1: "p2" },
-      eliminatedBy: { p2: "p3" },
-    };
-    expect(objectiveById("cacada").progress(state, map, "p1").text).toMatch(/^alvo caiu/);
-    const mine: GameState = { ...state, eliminatedBy: { p2: "p1" } };
-    expect(objectiveById("cacada").progress(mine, map, "p1").done).toBe(true);
+    expect(placeArmies(state, map, "sp", 1).winner).toBeNull();
   });
 });
