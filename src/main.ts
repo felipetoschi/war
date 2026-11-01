@@ -341,23 +341,19 @@ function runBotAction(action: BotAction) {
 }
 function onTerritoryClick(id: TerritoryId) {
   if (!state || rolling || state.battle) return;
-  const owner = state.territories[id]?.owner;
-  if (state.phase === "placement") {
-    // Rodada inicial: todos ao mesmo tempo; o soldado vai para o dono do estado tocado.
-    const player = state.players.find((p) => p.id === owner);
-    if (!player || player.bot || !playersStillPlacing(state).includes(player.id)) return;
-    act(() => {
-      state = placeArmies(state!, map, id, 1);
-      sfx.place();
-      if (state.phase !== "placement") addLog("Todos colocaram seus soldados: começa a rodada 1!");
-    });
-    return;
-  }
   if (currentPlayer(state).bot) return; // vez de um bot: só assistir
+  const owner = state.territories[id]?.owner;
   confirmEndAttack = false;
   const me = currentPlayer(state).id;
   act(() => {
     switch (state!.phase) {
+      case "placement":
+        state = placeArmies(state!, map, id, 1);
+        sfx.place();
+        if (state.phase !== "placement") {
+          addLog("Todos colocaram seus soldados: começa a rodada 1!");
+        }
+        break;
       case "reinforce":
         state = placeArmies(state!, map, id, 1);
         sfx.place();
@@ -559,7 +555,6 @@ function renderBoard(game: GameState): string {
   }
   const focus = boardFocus(game);
   const me = currentPlayer(game).id;
-  const stillPlacing = game.phase === "placement" ? playersStillPlacing(game) : [];
   const involved = (id: TerritoryId) => focus?.from === id || focus?.to === id;
   // Quem está na ação é desenhado por último, para o contorno ficar por cima dos vizinhos.
   const ordered = [...map.territories].sort(
@@ -581,8 +576,7 @@ function renderBoard(game: GameState): string {
       }
       if (targets.has(t.id)) classes.push("target");
       const dim =
-        (game.phase === "placement" && !stillPlacing.includes(ts.owner)) ||
-        (game.phase === "reinforce" && ts.owner !== me) ||
+        ((game.phase === "placement" || game.phase === "reinforce") && ts.owner !== me) ||
         (focus !== null && !involved(t.id));
       if (dim) classes.push("dim");
       const color = playerById(game, ts.owner).color;
@@ -691,15 +685,13 @@ function renderRegions(game: GameState): string {
 
 // ---- cantos dos jogadores ----
 /**
- * Quem está na ação agora e tem o canto aberto: quem rola a ordem, quem ainda coloca os
- * soldados iniciais, o jogador da vez (reforço, ataque, remanejamento) e quem defende.
+ * Quem está na ação agora e tem o canto aberto: quem rola a ordem, o jogador da vez
+ * (rodada inicial, reforço, ataque, remanejamento) e quem defende.
  */
 function inAction(game: GameState, player: Player): boolean {
   switch (game.phase) {
     case "order":
       return true;
-    case "placement":
-      return playersStillPlacing(game).includes(player.id);
     case "finished":
       return game.winner === player.id;
   }
@@ -862,13 +854,9 @@ function botSeatNote(game: GameState, player: Player): string {
     }
     return "";
   }
-  if (game.phase === "placement") {
-    return playersStillPlacing(game).includes(player.id)
-      ? note("🤖 Colocando os soldados…")
-      : note("Pronto! Aguardando os outros…");
-  }
   if (currentPlayer(game).id !== player.id || rolling) return "";
   const doing: Record<string, string> = {
+    placement: `🤖 Colocando os ${INITIAL_ARMIES} soldados…`,
     reinforce: `🤖 Reforçando (${game.pendingReinforcements} soldado(s))…`,
     attack: "🤖 Escolhendo um ataque…",
     fortify: "🤖 Remanejando soldados…",
@@ -892,17 +880,20 @@ function seatActions(game: GameState, player: Player): string {
       ? `<p class="note big">🏆 Você venceu!</p><p class="note">Por: ${winText(game)}.</p><button id="new-game" class="primary">Nova partida</button>`
       : "";
   }
-  if (game.phase === "placement") {
-    const left = game.placementLeft[player.id] ?? 0;
-    return left > 0
-      ? `<p class="note"><b>Rodada inicial:</b> coloque ${left === INITIAL_ARMIES ? "seus" : "mais"} ${left} soldado(s) tocando nos seus estados. Todos colocam ao mesmo tempo.</p>`
-      : `<p class="note">Pronto! Aguardando os outros colocarem…</p>`;
-  }
   const battle = battleActions(game, player);
   if (battle !== null) return battle;
   if (currentPlayer(game).id !== player.id || rolling) return "";
 
   switch (game.phase) {
+    case "placement": {
+      const left = game.placementLeft[player.id] ?? 0;
+      const others = playersStillPlacing(game).length - 1;
+      const after =
+        others > 0
+          ? ` Depois, ${others === 1 ? "o próximo jogador coloca os dele" : `mais ${others} jogadores colocam os deles`}; a rodada 1 só começa quando todos tiverem colocado.`
+          : " Você é o último: depois, começa a rodada 1.";
+      return `<p class="note"><b>Rodada inicial:</b> coloque ${left === INITIAL_ARMIES ? "seus" : "mais"} ${left} soldado(s) tocando nos seus estados (pode dividir entre vários).${after}</p>`;
+    }
     case "reinforce":
       return reinforceActions(game, player);
     case "attack": {
@@ -988,9 +979,7 @@ function renderSeat(game: GameState, seat: Seat): string {
   const owned = territoriesOf(game, player.id);
   const armies = owned.reduce((sum, id) => sum + game.territories[id]!.armies, 0);
   const isTurn =
-    game.phase === "placement"
-      ? playersStillPlacing(game).includes(player.id)
-      : game.phase !== "order" && game.phase !== "finished" && currentPlayer(game).id === player.id;
+    game.phase !== "order" && game.phase !== "finished" && currentPlayer(game).id === player.id;
   const isDefending = game.battle?.defender === player.id;
   const out = owned.length === 0;
   const place =
@@ -1042,8 +1031,10 @@ function statusText(game: GameState): string {
   switch (game.phase) {
     case "order":
       return "Quem começa? Cada jogador rola o dado no seu canto";
-    case "placement":
-      return `Rodada inicial · todos colocam ${INITIAL_ARMIES} soldados ao mesmo tempo`;
+    case "placement": {
+      const done = game.players.length - playersStillPlacing(game).length;
+      return `Rodada inicial · ${who} coloca ${INITIAL_ARMIES} soldados · ${done + 1} de ${game.players.length}`;
+    }
     case "reinforce":
       return `Rodada ${game.round} · ${who} · Reforço`;
     case "attack":
@@ -1082,7 +1073,7 @@ function renderMenu(): string {
         <h2>Regras rápidas</h2>
         <ol class="rules">
           <li>Os estados são sorteados; os dados decidem a ordem.</li>
-          <li>Rodada inicial: todos colocam ${INITIAL_ARMIES} soldados ao mesmo tempo; a partida começa quando todos terminam.</li>
+          <li>Rodada inicial: um por vez, na ordem, cada um coloca ${INITIAL_ARMIES} soldados; a rodada 1 só começa quando todos tiverem colocado.</li>
           <li>Ataque só a estados vizinhos (que fazem divisa): escolha a origem, o alvo e com quantos soldados (até 3).</li>
           <li>O atacante rola os dados vermelhos e o defensor, os amarelos, cada um no seu canto. O maior vence; empate é da defesa.</li>
           <li>Quem conquistar pelo menos um estado no turno ganha uma carta no fim do turno (■ ▲ ● ou ★ coringa), visível para todos.</li>

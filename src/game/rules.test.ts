@@ -21,6 +21,7 @@ import {
   playersToRollForOrder,
   rollForOrder,
   reinforcementsFor,
+  currentPlayer,
   playersStillPlacing,
   MIN_REINFORCEMENT,
   territoriesOf,
@@ -108,22 +109,24 @@ describe("dados para a ordem de jogada e rodada inicial", () => {
     expect(game.players.map((p) => p.id)).toEqual(["a", "b"]);
   });
 
-  it("todos colocam ao mesmo tempo; só depois de todos começam os ataques, na ordem", () => {
+  it("um por vez, na ordem; só depois de todos colocarem começa a rodada 1", () => {
     let game = createGame(map, players);
     game = rollForOrder(game, map, "a", face(1));
     game = rollForOrder(game, map, "b", face(6)); // b começa
     const [a1, a2] = territoriesOf(game, "a");
     const b1 = territoriesOf(game, "b")[0]!;
-    // quem joga depois pode colocar antes: não há vez na rodada inicial
-    game = placeArmies(game, map, a1!, 2);
+    // é a vez de "b": "a" ainda não pode colocar
+    expect(() => placeArmies(game, map, a1!, 1)).toThrow();
+    game = placeArmies(game, map, b1, 2);
+    expect(currentPlayer(game).id).toBe("b");
     game = placeArmies(game, map, b1, 1);
+    expect(currentPlayer(game).id).toBe("a");
+    expect(playersStillPlacing(game)).toEqual(["a"]);
+    expect(game.phase).toBe("placement"); // ainda não começou: falta "a"
+
+    game = placeArmies(game, map, a1!, 2);
     game = placeArmies(game, map, a2!, 1);
     expect(game.territories[a1!]!.armies).toBe(3);
-    expect(playersStillPlacing(game)).toEqual(["b"]);
-    expect(() => placeArmies(game, map, a1!, 1)).toThrow(); // "a" já colocou os 3
-    expect(game.phase).toBe("placement");
-
-    game = placeArmies(game, map, b1, 2);
     // rodada 1: sem reforço, direto para o ataque do primeiro jogador
     expect(game.round).toBe(1);
     expect(game.phase).toBe("attack");

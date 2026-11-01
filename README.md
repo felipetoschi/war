@@ -5,7 +5,7 @@ no **mapa do Brasil** — 26 territórios (os estados, com Goiás/DF juntos), na
 
 - De **2 a 4 jogadores**, cada um num canto do tablet: 1º e 2º embaixo, 3º e 4º em cima (virados para eles).
 - Os territórios são **sorteados**; depois, **dados** decidem a ordem de jogo.
-- Rodada inicial com **3 soldados** para cada, todos ao mesmo tempo; ataque escolhendo origem, alvo e quantos soldados.
+- Rodada inicial com **3 soldados** para cada, um por vez, antes da 1ª rodada; ataque escolhendo origem, alvo e quantos soldados.
 - O mapa fica fixo, no maior tamanho; só o canto de quem está na ação fica aberto.
 - **Dados como se fossem físicos** (vermelho ataca, amarelo defende): cada jogador rola o seu, no seu canto.
 - **Cartas de troca** (■ ▲ ● e coringa ★), visíveis para todos: uma por turno com conquista, trocadas por soldados.
