@@ -93,6 +93,8 @@ let target: TerritoryId | null = null;
 let selectedCards: string[] = [];
 let lastBattle: LastBattle | null = null;
 let menuOpen = false;
+/** Estados que receberam o bônus de +2 da última troca (ficam em destaque no reforço). */
+let tradeBonus: TerritoryId[] = [];
 /** Cantos fora da ação que o jogador abriu com um toque, para espiar. */
 const peeking = new Set<PlayerId>();
 /** Quais lugares da tela inicial são bots. */
@@ -201,6 +203,7 @@ function resetToSetup() {
   selectedCards = [];
   lastBattle = null;
   menuOpen = false;
+  tradeBonus = [];
   peeking.clear();
   log.length = 0;
 }
@@ -244,6 +247,7 @@ function renderPlayersScreen(): string {
 
 // ---- ações ----
 function doEndTurn() {
+  tradeBonus = [];
   selected = null;
   target = null;
   selectedCards = [];
@@ -462,8 +466,9 @@ function onTrade() {
     const result = tradeCards(state!, map, selectedCards);
     state = result.state;
     selectedCards = [];
+    tradeBonus = result.bonusTerritories;
     const bonus = result.bonusTerritories.length
-      ? ` e +${OWNED_CARD_BONUS} em ${result.bonusTerritories.map(sigla).join(", ")}`
+      ? ` e +${OWNED_CARD_BONUS} direto em ${result.bonusTerritories.map(sigla).join(", ")}`
       : "";
     addLog(`🃏 ${nameOf(player)} trocou cartas: +${result.armies} soldados${bonus}`);
     sfx.trade();
@@ -620,8 +625,18 @@ function renderBoard(game: GameState): string {
       <path d="M0,0 L10,5 L0,10 z" fill="#d63c31" stroke="#fff" stroke-width="1.2" />
     </marker></defs>`;
   const fx = focus ? `${attackArrow(focus)}` : "";
+  // Bônus da troca: +2 em cada estado das cartas que o jogador domina (já colocados ali).
+  const bonusMarks =
+    game.phase === "reinforce"
+      ? tradeBonus
+          .map((id) => {
+            const { x, y } = LABELS[id]!;
+            return `<circle class="bonus-ring" cx="${x}" cy="${y}" r="17" /><text class="bonus-mark" x="${x}" y="${y - 20}">+${OWNED_CARD_BONUS}</text>`;
+          })
+          .join("")
+      : "";
   const svgClass = focus ? `board focus-${focus.stage}` : "board";
-  return `<svg class="${svgClass}" viewBox="${VIEW_BOX}" role="img" aria-label="Mapa do Brasil">${arrowDefs}${states}${renderRegions(game)}${fx}${labels}${focus ? lossMarks(focus) : ""}</svg>`;
+  return `<svg class="${svgClass}" viewBox="${VIEW_BOX}" role="img" aria-label="Mapa do Brasil">${arrowDefs}${states}${renderRegions(game)}${fx}${labels}${focus ? lossMarks(focus) : ""}${bonusMarks}</svg>`;
 }
 
 /**
@@ -787,6 +802,13 @@ function battleActions(game: GameState, player: Player): string | null {
   return null;
 }
 
+/** Depois da troca: avisa onde foram parar os +2 das cartas de estados do jogador. */
+function seatTradeBonus(game: GameState, player: Player): string {
+  if (tradeBonus.length === 0 || game.phase !== "reinforce") return "";
+  if (currentPlayer(game).id !== player.id) return "";
+  return `<p class="note bonus-note">🃏 Bônus da troca: +${OWNED_CARD_BONUS} em <b>${tradeBonus.map(stateName).join(", ")}</b>, já colocados no estado da carta.</p>`;
+}
+
 function reinforceActions(game: GameState, player: Player): string {
   const hand = game.hands[player.id] ?? [];
   const chosen = hand.filter((c) => selectedCards.includes(c.id));
@@ -798,8 +820,14 @@ function reinforceActions(game: GameState, player: Player): string {
   }
   if (hasValidSet(hand)) {
     const valid = isValidSet(chosen);
-    parts.push(`<p class="note">🃏 Troca disponível (+${tradeValue(game.trades)} soldados): toque em 3 cartas.</p>
-      <button class="primary" id="trade" ${valid ? "" : "disabled"}>Trocar cartas</button>`);
+    const ownedChosen = chosen
+      .map((c) => c.territory)
+      .filter((t): t is TerritoryId => t !== null && game.territories[t]?.owner === player.id);
+    const extra = ownedChosen.length
+      ? ` + ${OWNED_CARD_BONUS} em ${ownedChosen.map(sigla).join(", ")}`
+      : "";
+    parts.push(`<p class="note">🃏 Troca disponível (+${tradeValue(game.trades)} soldados): toque em 3 cartas. Carta de estado seu: +${OWNED_CARD_BONUS} vão direto para esse estado.</p>
+      <button class="primary" id="trade" ${valid ? "" : "disabled"}>Trocar cartas${valid ? ` (+${tradeValue(game.trades)}${extra})` : ""}</button>`);
   }
   if (game.pendingReinforcements > 0) {
     parts.push(
@@ -997,6 +1025,7 @@ function renderSeat(game: GameState, seat: Seat): string {
       <div class="seat-body">
         <div class="seat-dice">${seatDice(game, player)}</div>
         ${seatBattleNote(game, player)}
+        ${seatTradeBonus(game, player)}
         <div class="seat-actions">${seatActions(game, player)}</div>
       </div>
       <div class="reserve">${reserveHtml(reserveFor(game, player), player.color)}</div>
@@ -1057,7 +1086,7 @@ function renderMenu(): string {
           <li>Ataque só a estados vizinhos (que fazem divisa): escolha a origem, o alvo e com quantos soldados (até 3).</li>
           <li>O atacante rola os dados vermelhos e o defensor, os amarelos, cada um no seu canto. O maior vence; empate é da defesa.</li>
           <li>Quem conquistar pelo menos um estado no turno ganha uma carta no fim do turno (■ ▲ ● ou ★ coringa), visível para todos.</li>
-          <li>3 cartas iguais ou 3 diferentes valem uma troca por soldados (próxima: +${tradeValue(state.trades)}). Carta de estado seu: +${OWNED_CARD_BONUS} nele. Com ${MAX_HAND} cartas, a troca é obrigatória.</li>
+          <li>3 cartas iguais ou 3 diferentes valem uma troca por soldados (próxima: +${tradeValue(state.trades)}). Carta de estado seu: +${OWNED_CARD_BONUS} obrigatoriamente nesse estado (colocados na hora). Com ${MAX_HAND} cartas, a troca é obrigatória.</li>
           <li>Remanejar: até 3 soldados de um estado para cada vizinho, sempre deixando 1.</li>
           <li>A partir da rodada 2: 1 soldado a cada 2 estados (no mínimo ${MIN_REINFORCEMENT}) + bônus de região.</li>
           <li>Objetivos abertos: cada jogador tem 2, visíveis no seu canto — conquistar as regiões sorteadas ou ter ${TERRITORY_GOAL} territórios. Vence quem cumprir qualquer um na sua vez, ou o último vivo.</li>
