@@ -109,14 +109,15 @@ button.primary {
 .attack-count {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   background: var(--attack);
-  font-size: 1.1rem;
+  color: #fff;
+  font-size: 1rem;
 }
 
 .attack-count .pawn {
-  width: 12px;
-  height: 16px;
+  width: 10px;
+  height: 14px;
 }
 
 /* ---- tela de jogadores ---- */
@@ -177,19 +178,34 @@ button.primary {
 }
 
 /* ---- mesa: mapa no centro, jogadores nos cantos ---- */
+/*
+ * O mapa tem tamanho fixo: o maior que cabe na tela, deixando só uma faixa mínima para os
+ * cantos dos jogadores. Assim ele não muda de tamanho quando o conteúdo dos cantos muda —
+ * se faltar espaço num canto, é o canto que rola.
+ */
 #app.table {
+  /* proporção do mapa (viewBox 690×639) */
+  --map-ratio: 1.0798;
+  --pad: 8px;
+  --gap: 8px;
+  /* faixa mínima de cada canto */
+  --seat-min: 170px;
   height: 100vh;
   height: 100dvh;
   width: 100vw;
-  padding: 10px;
+  padding: var(--pad);
   display: grid;
-  gap: 10px;
+  gap: var(--gap);
 }
 
 /* Tablet deitado: cantos à esquerda e à direita, mapa no meio. */
 @media (orientation: landscape) {
   #app.table {
-    grid-template-columns: minmax(230px, 23vw) minmax(0, 1fr) minmax(230px, 23vw);
+    --map-size: min(
+      calc((100dvh - 2 * var(--pad)) * var(--map-ratio)),
+      calc(100vw - 2 * var(--pad) - 2 * var(--gap) - 2 * var(--seat-min))
+    );
+    grid-template-columns: minmax(0, 1fr) var(--map-size) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-areas:
       "tl map tr"
@@ -200,8 +216,12 @@ button.primary {
 /* Tablet em pé: cantos em cima e embaixo, mapa no meio. */
 @media (orientation: portrait) {
   #app.table {
+    --map-size: min(
+      calc((100vw - 2 * var(--pad)) / var(--map-ratio)),
+      calc(100dvh - 2 * var(--pad) - 2 * var(--gap) - 2 * var(--seat-min))
+    );
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr) var(--map-size) minmax(0, 1fr);
     grid-template-areas:
       "tl tr"
       "map map"
@@ -244,11 +264,12 @@ button.primary {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  border-radius: 18px;
+  gap: 5px;
+  padding: 7px 8px;
+  border-radius: 14px;
   background: var(--seat);
-  border: 3px solid transparent;
+  font-size: 0.8rem;
+  border: 2px solid transparent;
   box-shadow: 0 4px 14px #0002;
   /* conteúdo encostado na borda do jogador; se não couber, o canto rola em vez de cortar */
   overflow-y: auto;
@@ -267,6 +288,7 @@ button.primary {
 .seat.empty {
   background: transparent;
   border: 0;
+  box-shadow: none;
 }
 
 .seat.current {
@@ -287,15 +309,25 @@ button.primary {
 }
 
 .seat-head .swatch {
-  width: 14px;
-  height: 14px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
   background: var(--pc);
   align-self: center;
 }
 
 .seat-name {
-  font-size: 1.15rem;
+  font-size: 0.95rem;
+}
+
+.seat .muted {
+  font-size: 0.75rem;
+}
+
+/* botões dentro dos cantos: menores */
+.seat button {
+  padding: 6px 10px;
+  border-radius: 8px;
 }
 
 .place {
@@ -306,12 +338,12 @@ button.primary {
 .seat-body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 5px;
 }
 
 .seat-dice {
   display: flex;
-  gap: 10px;
+  gap: 6px;
   min-height: 0;
 }
 
@@ -322,7 +354,7 @@ button.primary {
 .seat-actions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 5px;
 }
 
 .seat-actions:empty {
@@ -330,11 +362,11 @@ button.primary {
 }
 
 .note {
-  font-size: 0.92rem;
+  font-size: 0.8rem;
 }
 
 .note.big {
-  font-size: 1.3rem;
+  font-size: 1.1rem;
   font-weight: 800;
 }
 
@@ -343,10 +375,10 @@ button.primary {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 2px;
-  min-height: 36px;
-  padding: 4px 6px;
-  border-radius: 10px;
+  gap: 1px;
+  min-height: 22px;
+  padding: 2px 5px;
+  border-radius: 8px;
   background: #d9cdb3;
   box-shadow: inset 0 2px 6px #0004;
 }
@@ -358,7 +390,13 @@ button.primary {
 .pawn {
   width: 22px;
   height: 30px;
+  flex: none;
   filter: drop-shadow(0 2px 1px #0007);
+}
+
+.reserve .pawn {
+  width: 13px;
+  height: 18px;
 }
 
 .reserve-extra {
@@ -389,6 +427,10 @@ button.primary {
 
 .die3d.md {
   --size: 40px;
+}
+
+.seat .die3d {
+  --size: 34px;
 }
 
 .die3d i {
@@ -479,15 +521,199 @@ button.primary {
   stroke-width: 3;
 }
 
-.board .state.defending {
+/* ---- ação no mapa: quem ataca (vermelho) e quem defende (amarelo) ---- */
+.board .state.attacking {
   stroke: #fff;
-  stroke-width: 3;
-  animation: pulse 0.45s ease-in-out infinite alternate;
+  stroke-width: 3.5;
+  filter: drop-shadow(0 0 3px var(--attack)) drop-shadow(0 0 8px var(--attack));
 }
 
-@keyframes pulse {
+.board .state.defending {
+  stroke: var(--defense);
+  stroke-width: 4;
+  animation: under-attack 0.5s ease-in-out infinite alternate;
+}
+
+.board .state.attacked {
+  stroke: var(--defense);
+  stroke-width: 3.5;
+  filter: drop-shadow(0 0 6px var(--defense));
+}
+
+@keyframes under-attack {
+  from {
+    filter: drop-shadow(0 0 2px var(--defense)) brightness(1);
+  }
   to {
-    filter: brightness(1.35);
+    filter: drop-shadow(0 0 10px var(--defense)) brightness(1.3);
+  }
+}
+
+/* conquista: o estado pisca na cor nova */
+.board .state.conquered {
+  animation: conquered 0.6s ease-out 3;
+}
+
+@keyframes conquered {
+  0% {
+    filter: brightness(2.2) drop-shadow(0 0 14px #fff);
+  }
+  100% {
+    filter: brightness(1) drop-shadow(0 0 6px var(--defense));
+  }
+}
+
+/* o resto do mapa esmaece durante a ação */
+.board.focus-aim .state.dim,
+.board.focus-aim g.dim,
+.board.focus-battle .state.dim,
+.board.focus-battle g.dim {
+  opacity: 0.35;
+}
+
+.board.focus-result .state.dim,
+.board.focus-result g.dim {
+  opacity: 0.6;
+}
+
+.board.focus-aim .label.faded,
+.board.focus-battle .label.faded {
+  opacity: 0.4;
+}
+
+.board.focus-aim .regions,
+.board.focus-battle .regions {
+  opacity: 0.3;
+}
+
+/* marcadores dos dois estados: maiores e com anel na cor do papel de cada um */
+.board .badge-wrap {
+  transition: transform 0.2s;
+}
+
+.board .fx-from .badge-wrap,
+.board .fx-to .badge-wrap {
+  transform: scale(1.35);
+}
+
+.board .ring {
+  fill: none;
+  stroke-width: 4;
+}
+
+.board .fx-from .ring {
+  stroke: var(--attack);
+}
+
+.board .fx-to .ring {
+  stroke: var(--defense);
+}
+
+.board.focus-battle .fx-to .ring {
+  animation: ring-pulse 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes ring-pulse {
+  to {
+    stroke-width: 7;
+  }
+}
+
+.board .fx-from .sigla,
+.board .fx-to .sigla {
+  font-size: 11px;
+  transform: translateY(4px);
+}
+
+/* seta do ataque */
+.board .attack-arrow {
+  pointer-events: none;
+}
+
+.board .arrow-casing {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 8;
+  stroke-linecap: round;
+  opacity: 0.9;
+}
+
+.board .arrow-line {
+  fill: none;
+  stroke: var(--attack);
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+
+.board .attack-arrow.aim .arrow-line {
+  stroke-dasharray: 9 6;
+  animation: arrow-march 0.6s linear infinite;
+}
+
+.board .attack-arrow.result {
+  opacity: 0.55;
+}
+
+@keyframes arrow-march {
+  to {
+    stroke-dashoffset: -15;
+  }
+}
+
+/* resultado: soldados perdidos de cada lado */
+.board .loss {
+  text-anchor: end;
+  font-size: 17px;
+  font-weight: 900;
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 4px;
+  animation: loss-pop 0.45s ease-out;
+}
+
+.board .loss.attacker {
+  fill: var(--attack);
+}
+
+.board .loss.defender {
+  fill: #a87800;
+}
+
+@keyframes loss-pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.board .conquest-burst {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 3;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: burst 0.8s ease-out 2;
+  opacity: 0;
+}
+
+@keyframes burst {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board .state.defending,
+  .board .state.conquered,
+  .board .ring,
+  .board .arrow-line,
+  .board .conquest-burst {
+    animation: none !important;
   }
 }
 
@@ -561,23 +787,23 @@ button.primary {
 .status {
   /* canto inferior esquerdo da área do mapa: só tem mar ali */
   position: absolute;
-  left: 6px;
-  bottom: 6px;
+  left: 0;
+  bottom: 0;
   max-width: 45%;
-  padding: 6px 14px;
-  border-radius: 14px;
+  padding: 5px 12px;
+  border-radius: 12px;
   background: #fbf7eee6;
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   pointer-events: none;
 }
 
 .toolbar {
   position: absolute;
-  top: 6px;
-  right: 6px;
+  top: 0;
+  right: 0;
   display: flex;
-  gap: 6px;
+  gap: 4px;
 }
 
 .setup-screen .toolbar {
@@ -586,10 +812,10 @@ button.primary {
 }
 
 .tool {
-  width: 44px;
-  height: 44px;
+  width: 38px;
+  height: 38px;
   padding: 0;
-  font-size: 1.2rem;
+  font-size: 1.05rem;
   background: #fbf7eee6;
 }
 
@@ -672,32 +898,34 @@ button.primary {
   box-shadow: 0 0 22px var(--defense);
 }
 
+.seat .roll-attack,
+.seat .roll-defense {
+  font-size: 1rem;
+  padding: 10px;
+}
+
 .roll-attack {
   background: var(--attack);
   color: #fff;
-  font-size: 1.1rem;
-  padding: 14px;
 }
 
 .roll-defense {
   background: var(--defense);
   color: #1a1a1a;
-  font-size: 1.1rem;
-  padding: 14px;
 }
 
 /* ---- cartas de troca (visíveis para todos) ---- */
 .hand {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
 }
 
 .tcard {
-  width: 42px;
-  height: 56px;
-  padding: 4px 2px;
-  border-radius: 7px;
+  width: 30px;
+  height: 40px;
+  padding: 2px 1px;
+  border-radius: 5px;
   background: linear-gradient(160deg, #fbf7ea, #e2dac2);
   color: #1a1a1a;
   display: inline-flex;
@@ -717,12 +945,12 @@ button.primary {
 }
 
 .tcard .sym {
-  font-size: 1.25rem;
+  font-size: 0.95rem;
   line-height: 1;
 }
 
 .tcard .cname {
-  font-size: 0.75rem;
+  font-size: 0.6rem;
 }
 
 .tcard.sym-square .sym {
@@ -745,9 +973,9 @@ button.primary {
 .tcard.owned::after {
   content: "+2";
   position: absolute;
-  top: -7px;
-  right: -7px;
-  font-size: 0.65rem;
+  top: -6px;
+  right: -6px;
+  font-size: 0.55rem;
   padding: 1px 4px;
   border-radius: 999px;
   background: var(--pc);
@@ -760,7 +988,7 @@ button.primary {
 
 .tcard.picked {
   border-color: var(--accent);
-  transform: translateY(-6px);
+  transform: translateY(-4px);
 }
 
 .hand.full .tcard {
@@ -803,16 +1031,16 @@ button.primary {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  font-size: 0.85rem;
+  gap: 2px;
+  font-size: 0.72rem;
 }
 
 .objectives li {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
-  padding: 3px 8px;
-  border-radius: 8px;
+  gap: 6px;
+  padding: 2px 6px;
+  border-radius: 6px;
   background: #0000000d;
 }
 
@@ -853,4 +1081,12 @@ button.primary {
 .bot-note {
   color: var(--muted);
   font-style: italic;
+}
+
+.seat .chips {
+  gap: 4px;
+}
+
+.seat .chip {
+  min-width: 0;
 }

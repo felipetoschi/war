@@ -19,6 +19,7 @@ import {
   MAX_PLAYERS,
   maxAttackers,
   MIN_PLAYERS,
+  MIN_REINFORCEMENT,
   movableArmies,
   movableTo,
   mustTrade,
@@ -451,6 +452,74 @@ function onTrade() {
 }
 
 // ---- mapa ----
+/**
+ * Ação em destaque no mapa: o ataque sendo mirado, a batalha em andamento ou o resultado
+ * da última batalha. Os dois estados envolvidos ficam em evidência e o resto esmaece.
+ */
+interface BoardFocus {
+  from: TerritoryId;
+  to: TerritoryId;
+  stage: "aim" | "battle" | "result";
+}
+
+function boardFocus(game: GameState): BoardFocus | null {
+  if (game.battle) return { from: game.battle.from, to: game.battle.to, stage: "battle" };
+  if (game.phase !== "attack") return null;
+  if (
+    lastBattle &&
+    (!selected || selected === lastBattle.from) &&
+    (!target || target === lastBattle.to)
+  ) {
+    return { from: lastBattle.from, to: lastBattle.to, stage: "result" };
+  }
+  if (selected && target) return { from: selected, to: target, stage: "aim" };
+  return null;
+}
+
+/** Seta curva do estado atacante para o atacado, de marcador a marcador. */
+function attackArrow(focus: BoardFocus): string {
+  const a = LABELS[focus.from]!;
+  const b = LABELS[focus.to]!;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const gap = 19; // raio do marcador + folga
+  const x1 = a.x + ux * gap;
+  const y1 = a.y + uy * gap;
+  const x2 = b.x - ux * (gap + 4);
+  const y2 = b.y - uy * (gap + 4);
+  // curva para o lado, proporcional à distância
+  const bend = Math.min(40, len * 0.22);
+  const cx = (x1 + x2) / 2 - uy * bend;
+  const cy = (y1 + y2) / 2 + ux * bend;
+  const d = `M${x1.toFixed(1)},${y1.toFixed(1)} Q${cx.toFixed(1)},${cy.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
+  return `<g class="attack-arrow ${focus.stage}">
+      <path class="arrow-casing" d="${d}" />
+      <path class="arrow-line" d="${d}" marker-end="url(#arrow-head)" />
+    </g>`;
+}
+
+/** No resultado: quantos soldados cada lado perdeu, ao lado do marcador. */
+function lossMarks(focus: BoardFocus): string {
+  if (focus.stage !== "result" || !lastBattle) return "";
+  const { attackerLosses, defenderLosses } = lastBattle.battle;
+  const mark = (id: TerritoryId, n: number, cls: string) => {
+    if (n === 0) return "";
+    const { x, y } = LABELS[id]!;
+    // à esquerda do marcador: à direita fica a borda do mapa, no Nordeste
+    return `<text class="loss ${cls}" x="${x - 27}" y="${y + 6}">−${n}</text>`;
+  };
+  const conquered = lastBattle.conquered
+    ? (() => {
+        const { x, y } = LABELS[focus.to]!;
+        return `<circle class="conquest-burst" cx="${x}" cy="${y}" r="16" />`;
+      })()
+    : "";
+  return `${conquered}${mark(focus.from, attackerLosses, "attacker")}${mark(focus.to, defenderLosses, "defender")}`;
+}
+
 function renderBoard(game: GameState): string {
   const targets = new Set<TerritoryId>();
   if (selected && !target && game.phase === "attack" && !game.battle) {
@@ -464,18 +533,30 @@ function renderBoard(game: GameState): string {
       if (mine && movableTo(game, selected, n) > 0) targets.add(n);
     }
   }
-  const fighting = game.battle ?? (rolling === "defense" ? lastBattle : null);
+  const focus = boardFocus(game);
   const placing = game.phase === "placement" || game.phase === "reinforce";
   const me = currentPlayer(game).id;
+  const involved = (id: TerritoryId) => focus?.from === id || focus?.to === id;
+  // Quem está na ação é desenhado por último, para o contorno ficar por cima dos vizinhos.
+  const ordered = [...map.territories].sort(
+    (a, b) => Number(involved(a.id)) - Number(involved(b.id)),
+  );
 
-  const states = map.territories
+  const states = ordered
     .map((t) => {
       const ts = game.territories[t.id]!;
       const classes = ["state"];
-      if (selected === t.id || fighting?.from === t.id) classes.push("selected");
-      if (target === t.id || fighting?.to === t.id) classes.push("defending");
+      if (focus?.from === t.id) classes.push("attacking");
+      else if (focus?.to === t.id)
+        classes.push(focus.stage === "result" ? "attacked" : "defending");
+      else if (selected === t.id) {
+        classes.push(game.phase === "attack" ? "attacking" : "selected");
+      }
+      if (focus?.stage === "result" && focus.to === t.id && lastBattle?.conquered) {
+        classes.push("conquered");
+      }
       if (targets.has(t.id)) classes.push("target");
-      const dim = placing && ts.owner !== me;
+      const dim = (placing && ts.owner !== me) || (focus !== null && !involved(t.id));
       if (dim) classes.push("dim");
       const color = playerById(game, ts.owner).color;
       const path = (cls: string) =>
@@ -488,25 +569,37 @@ function renderBoard(game: GameState): string {
     })
     .join("");
 
-  const labels = map.territories
+  const labels = ordered
     .map((t) => {
       const { x, y, anchor } = LABELS[t.id]!;
       const ts = game.territories[t.id]!;
       const leader = anchor
         ? `<line class="leader" x1="${anchor.x}" y1="${anchor.y}" x2="${x}" y2="${y}" /><circle class="anchor" cx="${anchor.x}" cy="${anchor.y}" r="2" />`
         : "";
+      const role = focus?.from === t.id ? " fx-from" : focus?.to === t.id ? " fx-to" : "";
+      const faded = focus !== null && !involved(t.id) ? " faded" : "";
+      const ring = role ? `<circle class="ring" cx="${x}" cy="${y}" r="17" />` : "";
       return `
-        <g class="label" data-id="${t.id}">
+        <g class="label${role}${faded}" data-id="${t.id}">
           <circle class="hit" cx="${x}" cy="${y + 6}" r="20" />
           ${leader}
-          <circle class="badge" cx="${x}" cy="${y}" r="13" fill="${playerById(game, ts.owner).color}" />
-          <text class="armies" x="${x}" y="${y + 4.5}">${ts.armies}</text>
+          <g class="badge-wrap" style="transform-origin:${x}px ${y}px">
+            ${ring}
+            <circle class="badge" cx="${x}" cy="${y}" r="13" fill="${playerById(game, ts.owner).color}" />
+            <text class="armies" x="${x}" y="${y + 4.5}">${ts.armies}</text>
+          </g>
           <text class="sigla" x="${x}" y="${y + 24}">${sigla(t.id)}</text>
         </g>`;
     })
     .join("");
 
-  return `<svg class="board" viewBox="${VIEW_BOX}" role="img" aria-label="Mapa do Brasil">${states}${renderRegions(game)}${labels}</svg>`;
+  const arrowDefs = `<defs><marker id="arrow-head" viewBox="0 0 10 10" refX="5" refY="5"
+      markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#d63c31" stroke="#fff" stroke-width="1.2" />
+    </marker></defs>`;
+  const fx = focus ? `${attackArrow(focus)}` : "";
+  const svgClass = focus ? `board focus-${focus.stage}` : "board";
+  return `<svg class="${svgClass}" viewBox="${VIEW_BOX}" role="img" aria-label="Mapa do Brasil">${arrowDefs}${states}${renderRegions(game)}${fx}${labels}${focus ? lossMarks(focus) : ""}</svg>`;
 }
 
 /**
@@ -904,7 +997,7 @@ function renderMenu(): string {
           <li>Quem conquistar pelo menos um estado no turno ganha uma carta no fim do turno (■ ▲ ● ou ★ coringa), visível para todos.</li>
           <li>3 cartas iguais ou 3 diferentes valem uma troca por soldados (próxima: +${tradeValue(state.trades)}). Carta de estado seu: +${OWNED_CARD_BONUS} nele. Com ${MAX_HAND} cartas, a troca é obrigatória.</li>
           <li>Remanejar: até 3 soldados de um estado para cada vizinho, sempre deixando 1.</li>
-          <li>A partir da rodada 2: 1 soldado a cada 2 estados + bônus de região.</li>
+          <li>A partir da rodada 2: 1 soldado a cada 2 estados (no mínimo ${MIN_REINFORCEMENT}) + bônus de região.</li>
           <li>Objetivos abertos: cada jogador tem 2, visíveis no seu canto — conquistar as regiões sorteadas ou ter ${TERRITORY_GOAL} territórios. Vence quem cumprir qualquer um na sua vez, ou o último vivo.</li>
         </ol>
         <h3>Bônus por região</h3>

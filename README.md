@@ -11,7 +11,7 @@ no **mapa do Brasil** — 26 territórios (os estados, com Goiás/DF juntos), na
 - **Sons e música** de marcha militar, gerados pelo próprio jogo (sem arquivos de áudio).
 - **Bots 🤖:** qualquer jogador pode ser bot, inclusive todos, para assistir.
 - **Soldadinhos** na borda de cada jogador. Só se ataca estado que faz divisa.
-- Reforço: 1 soldado a cada 2 estados + bônus de região, a partir da rodada 2.
+- Reforço: 1 soldado a cada 2 estados (no mínimo 3) + bônus de região, a partir da rodada 2.
 - **2 objetivos abertos** por jogador: conquistar as regiões sorteadas ou ter 18 territórios — ou ser o último vivo.
 
 📖 As regras completas, e o que ainda está em aberto, estão em [docs/REGRAS.md](docs/REGRAS.md).

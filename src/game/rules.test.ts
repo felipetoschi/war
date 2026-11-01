@@ -21,6 +21,7 @@ import {
   playersToRollForOrder,
   rollForOrder,
   reinforcementsFor,
+  MIN_REINFORCEMENT,
   territoriesOf,
 } from "./rules";
 import { createDeck, isValidSet, tradeValue } from "./cards";
@@ -128,15 +129,25 @@ describe("dados para a ordem de jogada e rodada inicial", () => {
   });
 });
 
-describe("reforço: 1 soldado a cada 2 estados", () => {
-  it("conta 1 soldado a cada 2 estados", () => {
-    expect(reinforcementsFor(stateWith({ ac: 1 }), map, "a")).toBe(0);
-    expect(reinforcementsFor(stateWith({ ac: 1, am: 1, ro: 1 }), map, "a")).toBe(1);
-    expect(reinforcementsFor(stateWith({ ac: 1, am: 1, ro: 1, rr: 1 }), map, "a")).toBe(2);
+describe("reforço: 1 soldado a cada 2 estados, no mínimo 3", () => {
+  const owning = (ids: string[]) => stateWith(Object.fromEntries(ids.map((id) => [id, 1])));
+  const north = ["ac", "am", "ro", "rr", "pa", "ap", "to"];
+  const northeast = ["ma", "pi", "ce", "rn", "pb", "pe", "al", "se", "ba"];
+
+  it("quem tem poucos estados recebe o mínimo de 3", () => {
+    expect(reinforcementsFor(owning(["ac"]), map, "a")).toBe(MIN_REINFORCEMENT);
+    expect(reinforcementsFor(owning(["ac", "am", "ro"]), map, "a")).toBe(3);
+    expect(reinforcementsFor(owning(["ac", "am", "ro", "rr", "ma", "pi"]), map, "a")).toBe(3);
   });
 
-  it("soma o bônus da região", () => {
-    expect(reinforcementsFor(stateWith({ pr: 1, sc: 1, rs: 1 }), map, "a")).toBe(1 + 2);
+  it("a partir de 8 estados, conta 1 soldado a cada 2 estados", () => {
+    expect(reinforcementsFor(owning([...northeast.slice(0, 8)]), map, "a")).toBe(4);
+    expect(reinforcementsFor(owning([...northeast.slice(0, 8), "sp", "rj"]), map, "a")).toBe(5);
+  });
+
+  it("soma o bônus da região ao reforço (mínimo incluso)", () => {
+    expect(reinforcementsFor(owning(["pr", "sc", "rs"]), map, "a")).toBe(3 + 2);
+    expect(reinforcementsFor(owning(north), map, "a")).toBe(3 + 5);
   });
 
   it("começa na rodada 2: o reforço vem antes do ataque", () => {
@@ -145,7 +156,7 @@ describe("reforço: 1 soldado a cada 2 estados", () => {
     const next = endTurn(roundOneEnd, map); // volta ao primeiro: rodada 2
     expect(next.round).toBe(2);
     expect(next.phase).toBe("reinforce");
-    expect(next.pendingReinforcements).toBe(2);
+    expect(next.pendingReinforcements).toBe(3); // 4 estados dariam 2: vale o mínimo
   });
 
   it("na rodada 1 não há reforço", () => {
@@ -274,17 +285,23 @@ describe("cartas de troca", () => {
     expect(() => placeArmies(traded, map, "sp", 1)).not.toThrow();
   });
 
-  it("com uma troca possível, o reforço espera; sem soldados, pode seguir sem trocar", () => {
+  it("com uma troca possível, pode trocar antes; ou posicionar e seguir sem trocar", () => {
     const hand = [card("sp", "square"), card("ba", "square"), card("mg", "square")];
     const roundOneEnd: GameState = {
       ...stateWith({ ac: 1 }),
       currentPlayerIndex: 1,
       hands: { a: hand, b: [] },
     };
-    const next = endTurn(roundOneEnd, map); // rodada 2, "a" com 1 estado: 0 de reforço
+    const next = endTurn(roundOneEnd, map); // rodada 2, "a" com 1 estado: o mínimo de 3
     expect(next.phase).toBe("reinforce");
-    expect(next.pendingReinforcements).toBe(0);
-    expect(skipReinforce(next).phase).toBe("attack");
+    expect(next.pendingReinforcements).toBe(MIN_REINFORCEMENT);
+    expect(() => skipReinforce(next)).toThrow(); // precisa posicionar antes
+    expect(tradeCards(next, map, ["sp", "ba", "mg"]).state.pendingReinforcements).toBe(
+      MIN_REINFORCEMENT + 4,
+    );
+    const placed = placeArmies(next, map, "ac", MIN_REINFORCEMENT);
+    expect(placed.phase).toBe("attack");
+    expect(placed.hands.a).toHaveLength(3); // não trocou: fica com as cartas
   });
 
   it("quem elimina um jogador fica com as cartas dele", () => {
