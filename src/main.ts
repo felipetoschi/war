@@ -760,177 +760,267 @@ function seatDice(game: GameState, player: Player): string {
   return "";
 }
 
-function seatBattleNote(game: GameState, player: Player): string {
-  if (!lastBattle || rolling || game.battle) return "";
-  const { battle, attacker, defender, conquered, to } = lastBattle;
-  if (player.id === attacker) {
-    return `<p class="note">Perdeu ${battle.attackerLosses}${conquered ? ` · <b>conquistou ${sigla(to)}!</b>` : ""}</p>`;
+/** Botões da batalha no canto do atacante e do defensor (sem textos: a instrução vai no centro). */
+function battleActions(game: GameState, player: Player): string | null {
+  const pending = game.battle;
+  if (!pending || rolling) return null;
+  if (player.id === pending.attacker && !pending.attackRolls) {
+    return `<div class="row">
+        <button class="primary roll-attack" id="roll-attack">🎲 Rolar ataque</button>
+        <button id="cancel-attack" class="small" title="Desistir do ataque">Desistir</button>
+      </div>`;
   }
-  if (player.id === defender) {
-    return `<p class="note">Perdeu ${battle.defenderLosses}${conquered ? ` · <b>perdeu ${sigla(to)}</b>` : ""}</p>`;
+  if (player.id === pending.defender && pending.attackRolls) {
+    return `<button class="primary roll-defense" id="roll-defense">🎲 Rolar defesa</button>`;
   }
   return "";
 }
 
-function battleActions(game: GameState, player: Player): string | null {
-  const pending = game.battle;
-  if (!pending || rolling) return null;
-  const attacker = playerById(game, pending.attacker);
-  if (player.id === pending.attacker) {
-    if (!pending.attackRolls) {
-      return `<p class="note"><b>${sigla(pending.from)}</b> ⚔ <b>${sigla(pending.to)}</b> · ${pending.soldiers} dado(s)</p>
-        <div class="row">
-          <button class="primary roll-attack" id="roll-attack">🎲 Rolar ataque</button>
-          <button id="cancel-attack" class="small" title="Desistir do ataque">Desistir</button>
-        </div>`;
-    }
-    return `<p class="note">Aguardando a defesa de ${nameOf(playerById(game, pending.defender))}…</p>`;
-  }
-  if (player.id === pending.defender) {
-    if (!pending.attackRolls) {
-      return `<p class="note">${nameOf(attacker)} vai atacar <b>${sigla(pending.to)}</b>…</p>`;
-    }
-    return `<p class="note">Defenda <b>${sigla(pending.to)}</b>! · ${pending.defenseDice} dado(s)</p>
-      <button class="primary roll-defense" id="roll-defense">🎲 Rolar defesa</button>`;
-  }
-  return null;
-}
-
-/** Depois da troca: avisa onde foram parar os +2 das cartas de estados do jogador. */
-function seatTradeBonus(game: GameState, player: Player): string {
-  if (tradeBonus.length === 0 || game.phase !== "reinforce") return "";
-  if (currentPlayer(game).id !== player.id) return "";
-  return `<p class="note bonus-note">🃏 +${OWNED_CARD_BONUS} já colocados em <b>${tradeBonus.map(sigla).join(", ")}</b> (carta de estado seu).</p>`;
-}
-
-function reinforceActions(game: GameState, player: Player): string {
-  const hand = game.hands[player.id] ?? [];
+function reinforceActions(game: GameState): string {
+  const hand = game.hands[currentPlayer(game).id] ?? [];
   const chosen = hand.filter((c) => selectedCards.includes(c.id));
   const parts: string[] = [];
-  if (mustTrade(game)) {
-    parts.push(`<p class="note warn">${hand.length} cartas: troque antes de colocar.</p>`);
-  }
   if (hasValidSet(hand)) {
     const valid = isValidSet(chosen);
-    const ownedChosen = chosen
-      .map((c) => c.territory)
-      .filter((t): t is TerritoryId => t !== null && game.territories[t]?.owner === player.id);
-    const extra = ownedChosen.length
-      ? ` + ${OWNED_CARD_BONUS} em ${ownedChosen.map(sigla).join(", ")}`
-      : "";
-    parts.push(`<p class="note">🃏 Troca (+${tradeValue(game.trades)}): toque em 3 cartas. Carta de estado seu: +${OWNED_CARD_BONUS} nele.</p>
-      <button class="primary" id="trade" ${valid ? "" : "disabled"}>Trocar cartas${valid ? ` (+${tradeValue(game.trades)}${extra})` : ""}</button>`);
-  }
-  if (game.pendingReinforcements > 0) {
     parts.push(
-      `<p class="note"><b>Reforço:</b> toque nos seus estados para colocar ${game.pendingReinforcements} soldado(s).</p>`,
+      `<button class="primary" id="trade" ${valid ? "" : "disabled"}>🃏 Trocar cartas${valid ? ` (+${tradeValue(game.trades)})` : ""}</button>`,
     );
-  } else if (!mustTrade(game)) {
+  }
+  if (game.pendingReinforcements === 0 && !mustTrade(game)) {
     parts.push(`<button id="skip-reinforce">Seguir para o ataque</button>`);
   }
   return parts.join("");
 }
 
-/** O que aparece no canto de um bot: só o que ele está fazendo (sem botões). */
-function botSeatNote(game: GameState, player: Player): string {
-  const note = (text: string) => `<p class="note bot-note">${text}</p>`;
-  if (game.phase === "order") {
-    return playersToRollForOrder(game).includes(player.id) && !rolling
-      ? note("🤖 Rolando o dado…")
-      : "";
-  }
-  const battle = game.battle;
-  if (battle) {
-    const other = (id: string) => nameOf(playerById(game, id));
-    if (player.id === battle.attacker) {
-      return battle.attackRolls
-        ? note(`Aguardando a defesa de ${other(battle.defender)}…`)
-        : note(`🤖 Atacando ${stateName(battle.to)} com ${battle.soldiers}…`);
-    }
-    if (player.id === battle.defender) {
-      return battle.attackRolls
-        ? note("🤖 Defendendo…")
-        : note(`${other(battle.attacker)} vai atacar ${stateName(battle.to)}…`);
-    }
-    return "";
-  }
-  if (currentPlayer(game).id !== player.id || rolling) return "";
-  const doing: Record<string, string> = {
-    placement: `🤖 Colocando os ${INITIAL_ARMIES} soldados…`,
-    reinforce: `🤖 Reforçando (${game.pendingReinforcements} soldado(s))…`,
-    attack: "🤖 Escolhendo um ataque…",
-    fortify: "🤖 Remanejando soldados…",
-  };
-  return note(doing[game.phase] ?? "");
-}
-
+/** Só os botões da jogada; as instruções aparecem no centro da tela (`centerMessage`). */
 function seatActions(game: GameState, player: Player): string {
-  if (player.bot && game.phase !== "finished") return botSeatNote(game, player);
-  if (game.phase === "order") {
-    if (rolling) return "";
-    if (playersToRollForOrder(game).includes(player.id)) {
-      const tie = (game.orderRolls[player.id]?.length ?? 0) > 0;
-      return `${tie ? `<p class="note warn">Empate! Role de novo.</p>` : `<p class="note">Role o dado: quem tirar mais começa.</p>`}
-        <button class="primary" data-roll="${player.id}">🎲 Rolar dado</button>`;
-    }
-    return `<p class="note">Aguardando os outros jogadores…</p>`;
-  }
   if (game.phase === "finished") {
     return game.winner === player.id
-      ? `<p class="note big">🏆 Você venceu!</p><p class="note">Por: ${winText(game)}.</p><button id="new-game" class="primary">Nova partida</button>`
+      ? `<button id="new-game" class="primary">Nova partida</button>`
       : "";
+  }
+  if (player.bot) return "";
+  if (game.phase === "order") {
+    if (rolling || !playersToRollForOrder(game).includes(player.id)) return "";
+    return `<button class="primary" data-roll="${player.id}">🎲 Rolar dado</button>`;
   }
   const battle = battleActions(game, player);
   if (battle !== null) return battle;
   if (currentPlayer(game).id !== player.id || rolling) return "";
 
   switch (game.phase) {
-    case "placement": {
-      const left = game.placementLeft[player.id] ?? 0;
-      const others = playersStillPlacing(game).length - 1;
-      const after =
-        others > 0
-          ? `Depois ${others === 1 ? "falta 1 jogador" : `faltam ${others} jogadores`}; a rodada 1 começa quando todos colocarem.`
-          : "Você é o último: depois começa a rodada 1.";
-      return `<p class="note"><b>Rodada inicial:</b> toque nos seus estados para colocar ${left} soldado(s).</p>
-        <p class="note muted">${after}</p>`;
-    }
     case "reinforce":
-      return reinforceActions(game, player);
+      return reinforceActions(game);
     case "attack": {
-      const endAttack = `<button id="end-attack" class="small end-attack">Encerrar ataques</button>`;
-      let step: string;
-      if (!selected) {
-        step = `<p class="note"><b>Ataque:</b> toque no estado de onde parte o ataque.</p>`;
-      } else if (!target) {
-        step = `<p class="note">De <b>${sigla(selected)}</b>: toque no vizinho a atacar.</p>`;
-      } else {
-        const max = maxAttackers(game, selected);
-        const buttons = Array.from(
-          { length: max },
-          (_, i) =>
-            `<button class="chip attack-count" data-attack="${i + 1}">${i + 1}<span>${pawnSvg(player.color).repeat(i + 1)}</span></button>`,
-        ).join("");
-        // botões de quantidade e "Encerrar" na mesma linha, para caber sem rolar
-        step = `<p class="note"><b>${sigla(selected)}</b> → <b>${sigla(target)}</b>: com quantos?</p>
-          <div class="chips">${buttons}${confirmEndAttack ? "" : endAttack}</div>`;
-      }
       if (confirmEndAttack) {
-        return `<p class="note warn">Encerrar os ataques desta vez?</p>
-          <div class="confirm">
+        return `<div class="confirm">
             <button id="confirm-end-attack" class="primary">Sim, encerrar</button>
             <button id="cancel-end-attack">Continuar</button>
           </div>`;
       }
-      return step.includes('id="end-attack"') ? step : `${step}${endAttack}`;
+      const endAttack = `<button id="end-attack" class="small end-attack">Encerrar ataques</button>`;
+      if (!selected || !target) return endAttack;
+      const max = maxAttackers(game, selected);
+      const buttons = Array.from(
+        { length: max },
+        (_, i) =>
+          `<button class="chip attack-count" data-attack="${i + 1}">${i + 1}<span>${pawnSvg(player.color).repeat(i + 1)}</span></button>`,
+      ).join("");
+      return `<div class="chips">${buttons}${endAttack}</div>`;
     }
     case "fortify":
-      return `<p class="note"><b>Remanejar</b> (opcional): toque num estado seu e depois num vizinho (até 3 por vizinho).</p>
-        ${selected ? `<p class="note">De <b>${sigla(selected)}</b>: ${movableArmies(game, selected)} disponível(is).</p>` : ""}
-        <button id="end-turn" class="primary">Passar a vez</button>`;
+      return `<button id="end-turn" class="primary">Passar a vez</button>`;
     default:
       return "";
   }
+}
+
+// ---- instrução no centro da tela ----
+interface CenterMessage {
+  /** Para quem é a mensagem (o texto fica virado para o lado dele); null = para todos. */
+  to: Player | null;
+  html: string;
+  tone?: "attack" | "defense" | "win";
+}
+
+/** A instrução da jogada, em destaque no meio da tela, para quem precisa agir agora. */
+function centerMessage(game: GameState): CenterMessage | null {
+  const line = (text: string, cls = "") => `<p class="${cls}">${text}</p>`;
+  const sub = (text: string) => line(text, "sub");
+  if (game.phase === "finished") {
+    const winner = playerById(game, game.winner!);
+    return {
+      to: winner,
+      tone: "win",
+      html: line(`🏆 ${nameOf(winner)} venceu!`, "big") + sub(`Por: ${winText(game)}.`),
+    };
+  }
+  if (rolling) return null; // dados rolando: o centro fica livre
+
+  if (game.phase === "order") {
+    const pending = playersToRollForOrder(game);
+    const tie = pending.some((id) => (game.orderRolls[id]?.length ?? 0) > 0);
+    return {
+      to: null,
+      html: tie
+        ? line("Empate!") +
+          sub(`${pending.map((id) => nameOf(playerById(game, id))).join(" e ")} rolam de novo.`)
+        : line("Quem começa?") +
+          sub("Cada um toca em 🎲 Rolar dado no seu canto; quem tirar mais começa."),
+    };
+  }
+
+  const battle = game.battle;
+  if (battle) {
+    const attacker = playerById(game, battle.attacker);
+    const defender = playerById(game, battle.defender);
+    if (!battle.attackRolls) {
+      return {
+        to: attacker,
+        tone: "attack",
+        html:
+          line(`<b>${stateName(battle.from)}</b> ⚔ <b>${stateName(battle.to)}</b>`) +
+          sub(
+            attacker.bot
+              ? `🤖 ${nameOf(attacker)} vai rolar ${battle.soldiers} dado(s)…`
+              : `Role o ataque: ${battle.soldiers} dado(s) vermelho(s).`,
+          ),
+      };
+    }
+    return {
+      to: defender,
+      tone: "defense",
+      html:
+        line(`Defenda <b>${stateName(battle.to)}</b>!`) +
+        sub(
+          defender.bot
+            ? `🤖 ${nameOf(defender)} vai rolar a defesa…`
+            : `${nameOf(defender)}, role ${battle.defenseDice} dado(s) amarelo(s) no seu canto.`,
+        ),
+    };
+  }
+
+  const player = currentPlayer(game);
+  if (player.bot) {
+    const doing: Record<string, string> = {
+      placement: `colocando os ${INITIAL_ARMIES} soldados`,
+      reinforce: `reforçando (${game.pendingReinforcements} soldado(s))`,
+      attack: "escolhendo um ataque",
+      fortify: "remanejando soldados",
+    };
+    return {
+      to: player,
+      html: line(`🤖 ${nameOf(player)}`) + sub(`${doing[game.phase] ?? "jogando"}…`),
+    };
+  }
+
+  switch (game.phase) {
+    case "placement": {
+      const left = game.placementLeft[player.id] ?? 0;
+      const others = playersStillPlacing(game).length - 1;
+      return {
+        to: player,
+        html:
+          line(`Rodada inicial: coloque ${left} soldado(s)`) +
+          sub(
+            `Toque nos seus estados. ${
+              others > 0
+                ? `Depois ${others === 1 ? "falta 1 jogador" : `faltam ${others} jogadores`}; a rodada 1 começa quando todos colocarem.`
+                : "Você é o último: depois começa a rodada 1."
+            }`,
+          ),
+      };
+    }
+    case "reinforce": {
+      const hand = game.hands[player.id] ?? [];
+      const parts: string[] = [];
+      if (tradeBonus.length) {
+        parts.push(
+          sub(
+            `🃏 +${OWNED_CARD_BONUS} já colocados em ${tradeBonus.map(sigla).join(", ")} (carta de estado seu).`,
+          ),
+        );
+      }
+      if (mustTrade(game)) {
+        parts.unshift(line(`Você tem ${hand.length} cartas: troque antes de colocar`));
+      } else if (game.pendingReinforcements > 0) {
+        parts.unshift(line(`Reforço: coloque ${game.pendingReinforcements} soldado(s)`));
+        parts.push(sub("Toque nos seus estados."));
+      } else {
+        parts.unshift(line("Reforço feito"));
+      }
+      if (hasValidSet(hand)) {
+        parts.push(
+          sub(
+            `Troca de cartas (+${tradeValue(game.trades)}): toque em 3 cartas no seu canto. Carta de estado seu: +${OWNED_CARD_BONUS} nele.`,
+          ),
+        );
+      }
+      return { to: player, html: parts.join("") };
+    }
+    case "attack": {
+      let result = "";
+      if (lastBattle && !game.battle) {
+        const { battle: b, conquered, to } = lastBattle;
+        result = sub(
+          `Último ataque: ataque perdeu ${b.attackerLosses}, defesa perdeu ${b.defenderLosses}${conquered ? ` · <b>${stateName(to)} conquistado!</b>` : ""}`,
+        );
+      }
+      if (confirmEndAttack) {
+        return {
+          to: player,
+          html:
+            line("Encerrar os ataques desta vez?") +
+            sub("Depois não dá para atacar de novo nesta vez."),
+        };
+      }
+      if (!selected) {
+        return {
+          to: player,
+          tone: "attack",
+          html: line("Ataque: toque no estado de onde parte o ataque") + result,
+        };
+      }
+      if (!target) {
+        return {
+          to: player,
+          tone: "attack",
+          html: line(`De <b>${stateName(selected)}</b>: toque no vizinho a atacar`) + result,
+        };
+      }
+      return {
+        to: player,
+        tone: "attack",
+        html:
+          line(`<b>${stateName(selected)}</b> → <b>${stateName(target)}</b>`) +
+          sub("Com quantos soldados? Escolha no seu canto."),
+      };
+    }
+    case "fortify":
+      return {
+        to: player,
+        html:
+          line("Remanejar (opcional)") +
+          sub(
+            selected
+              ? `De <b>${stateName(selected)}</b>: toque num vizinho seu (${movableArmies(game, selected)} disponível(is)).`
+              : "Toque num estado seu e depois num vizinho seu para mover 1 soldado (até 3 por vizinho).",
+          ),
+      };
+    default:
+      return null;
+  }
+}
+
+function renderCenterMessage(game: GameState): string {
+  const msg = centerMessage(game);
+  if (!msg) return "";
+  const seat = msg.to ? seats[msg.to.id] : null;
+  const flipped = seat === "tl" || seat === "tr";
+  const who = msg.to ? `<p class="who"><span class="swatch"></span>${nameOf(msg.to)}</p>` : "";
+  return `<div class="center-msg${flipped ? " flipped" : ""}${msg.tone ? ` tone-${msg.tone}` : ""}" style="--pc:${msg.to?.color ?? "#1f2d3a"}">
+      ${who}${msg.html}
+    </div>`;
 }
 
 function seatObjectives(game: GameState, player: Player): string {
@@ -1033,11 +1123,7 @@ function renderSeat(game: GameState, seat: Seat): string {
         ${showHand(game, player) ? seatHand(game, player) : ""}
         <div class="seat-body">
           <div class="seat-dice">${seatDice(game, player)}</div>
-          <div class="seat-actions">
-            ${seatBattleNote(game, player)}
-            ${seatTradeBonus(game, player)}
-            ${seatActions(game, player)}
-          </div>
+          <div class="seat-actions">${seatActions(game, player)}</div>
         </div>
       </div>
       ${reserve > 0 ? `<div class="reserve">${reserveHtml(reserve, player.color)}</div>` : ""}
@@ -1132,6 +1218,7 @@ function render() {
       ${SEATS.map((s) => renderSeat(view, s)).join("")}
       <main class="board-wrap">
         ${renderBoard(view)}
+        ${renderCenterMessage(view)}
         <div class="status">${statusText(view)}</div>
         ${toolbar()}
       </main>
