@@ -133,7 +133,12 @@ jogador.
 - **Dados como se fossem físicos**, no canto de cada jogador: **vermelho ataca, amarelo defende**.
   Cada um rola o seu, no seu lado. Eles chacoalham antes de parar; os que perderam a comparação
   ficam apagados. Quem está sendo atacado tem o canto aceso em amarelo.
-- **Cartas** e **objetivos** visíveis no canto de cada jogador.
+- **Cartas** e **objetivos** visíveis no canto de cada jogador. Os **objetivos ficam fixos na parte
+  de baixo** do canto (título curto e progresso, lado a lado). As cartas aparecem no reforço (para
+  trocar) ou ao espiar; fora disso, o placar mostra quantas são (🃏3).
+- **Canto compacto, sem rolar:** dados e botões de ataque e defesa ficam lado a lado (dados à
+  esquerda, "Rolar ataque"/"Rolar defesa" ao lado), com textos curtos; os soldadinhos de reserva
+  só aparecem quando há soldados a colocar.
 - **Só quem está na ação tem o canto aberto:** o jogador da vez (reforço, ataque ou
   remanejamento, ou colocando os soldados da rodada inicial) e quem está defendendo.
   Os outros cantos viram uma etiqueta com o nome, os estados e os soldados — um toque nela abre o

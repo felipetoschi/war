@@ -764,10 +764,10 @@ function seatBattleNote(game: GameState, player: Player): string {
   if (!lastBattle || rolling || game.battle) return "";
   const { battle, attacker, defender, conquered, to } = lastBattle;
   if (player.id === attacker) {
-    return `<p class="note">Ataque perdeu ${battle.attackerLosses}${conquered ? ` · conquistou ${stateName(to)}!` : ""}</p>`;
+    return `<p class="note">Perdeu ${battle.attackerLosses}${conquered ? ` · <b>conquistou ${sigla(to)}!</b>` : ""}</p>`;
   }
   if (player.id === defender) {
-    return `<p class="note">Defesa perdeu ${battle.defenderLosses}${conquered ? ` · perdeu ${stateName(to)}` : ""}</p>`;
+    return `<p class="note">Perdeu ${battle.defenderLosses}${conquered ? ` · <b>perdeu ${sigla(to)}</b>` : ""}</p>`;
   }
   return "";
 }
@@ -778,17 +778,19 @@ function battleActions(game: GameState, player: Player): string | null {
   const attacker = playerById(game, pending.attacker);
   if (player.id === pending.attacker) {
     if (!pending.attackRolls) {
-      return `<p class="note"><b>${stateName(pending.from)}</b> ⚔ <b>${stateName(pending.to)}</b> com ${pending.soldiers} soldado(s).<br/>Role seus dados vermelhos!</p>
-        <button class="primary roll-attack" id="roll-attack">🎲 Rolar ataque</button>
-        <button id="cancel-attack">Desistir</button>`;
+      return `<p class="note"><b>${sigla(pending.from)}</b> ⚔ <b>${sigla(pending.to)}</b> · ${pending.soldiers} dado(s)</p>
+        <div class="row">
+          <button class="primary roll-attack" id="roll-attack">🎲 Rolar ataque</button>
+          <button id="cancel-attack" class="small" title="Desistir do ataque">Desistir</button>
+        </div>`;
     }
     return `<p class="note">Aguardando a defesa de ${nameOf(playerById(game, pending.defender))}…</p>`;
   }
   if (player.id === pending.defender) {
     if (!pending.attackRolls) {
-      return `<p class="note">${nameOf(attacker)} vai atacar <b>${stateName(pending.to)}</b>…</p>`;
+      return `<p class="note">${nameOf(attacker)} vai atacar <b>${sigla(pending.to)}</b>…</p>`;
     }
-    return `<p class="note">Você está sendo atacado em <b>${stateName(pending.to)}</b>!<br/>Role seus ${pending.defenseDice} dado(s) amarelo(s).</p>
+    return `<p class="note">Defenda <b>${sigla(pending.to)}</b>! · ${pending.defenseDice} dado(s)</p>
       <button class="primary roll-defense" id="roll-defense">🎲 Rolar defesa</button>`;
   }
   return null;
@@ -798,7 +800,7 @@ function battleActions(game: GameState, player: Player): string | null {
 function seatTradeBonus(game: GameState, player: Player): string {
   if (tradeBonus.length === 0 || game.phase !== "reinforce") return "";
   if (currentPlayer(game).id !== player.id) return "";
-  return `<p class="note bonus-note">🃏 Bônus da troca: +${OWNED_CARD_BONUS} em <b>${tradeBonus.map(stateName).join(", ")}</b>, já colocados no estado da carta.</p>`;
+  return `<p class="note bonus-note">🃏 +${OWNED_CARD_BONUS} já colocados em <b>${tradeBonus.map(sigla).join(", ")}</b> (carta de estado seu).</p>`;
 }
 
 function reinforceActions(game: GameState, player: Player): string {
@@ -806,9 +808,7 @@ function reinforceActions(game: GameState, player: Player): string {
   const chosen = hand.filter((c) => selectedCards.includes(c.id));
   const parts: string[] = [];
   if (mustTrade(game)) {
-    parts.push(
-      `<p class="note warn">Você tem ${hand.length} cartas: é obrigatório trocar antes de posicionar.</p>`,
-    );
+    parts.push(`<p class="note warn">${hand.length} cartas: troque antes de colocar.</p>`);
   }
   if (hasValidSet(hand)) {
     const valid = isValidSet(chosen);
@@ -818,12 +818,12 @@ function reinforceActions(game: GameState, player: Player): string {
     const extra = ownedChosen.length
       ? ` + ${OWNED_CARD_BONUS} em ${ownedChosen.map(sigla).join(", ")}`
       : "";
-    parts.push(`<p class="note">🃏 Troca disponível (+${tradeValue(game.trades)} soldados): toque em 3 cartas. Carta de estado seu: +${OWNED_CARD_BONUS} vão direto para esse estado.</p>
+    parts.push(`<p class="note">🃏 Troca (+${tradeValue(game.trades)}): toque em 3 cartas. Carta de estado seu: +${OWNED_CARD_BONUS} nele.</p>
       <button class="primary" id="trade" ${valid ? "" : "disabled"}>Trocar cartas${valid ? ` (+${tradeValue(game.trades)}${extra})` : ""}</button>`);
   }
   if (game.pendingReinforcements > 0) {
     parts.push(
-      `<p class="note"><b>Reforço:</b> coloque ${game.pendingReinforcements} soldado(s) nos seus estados.</p>`,
+      `<p class="note"><b>Reforço:</b> toque nos seus estados para colocar ${game.pendingReinforcements} soldado(s).</p>`,
     );
   } else if (!mustTrade(game)) {
     parts.push(`<button id="skip-reinforce">Seguir para o ataque</button>`);
@@ -890,18 +890,20 @@ function seatActions(game: GameState, player: Player): string {
       const others = playersStillPlacing(game).length - 1;
       const after =
         others > 0
-          ? ` Depois, ${others === 1 ? "o próximo jogador coloca os dele" : `mais ${others} jogadores colocam os deles`}; a rodada 1 só começa quando todos tiverem colocado.`
-          : " Você é o último: depois, começa a rodada 1.";
-      return `<p class="note"><b>Rodada inicial:</b> coloque ${left === INITIAL_ARMIES ? "seus" : "mais"} ${left} soldado(s) tocando nos seus estados (pode dividir entre vários).${after}</p>`;
+          ? `Depois ${others === 1 ? "falta 1 jogador" : `faltam ${others} jogadores`}; a rodada 1 começa quando todos colocarem.`
+          : "Você é o último: depois começa a rodada 1.";
+      return `<p class="note"><b>Rodada inicial:</b> toque nos seus estados para colocar ${left} soldado(s).</p>
+        <p class="note muted">${after}</p>`;
     }
     case "reinforce":
       return reinforceActions(game, player);
     case "attack": {
+      const endAttack = `<button id="end-attack" class="small end-attack">Encerrar ataques</button>`;
       let step: string;
       if (!selected) {
-        step = `<p class="note"><b>Ataque:</b> toque no estado de onde vai partir o ataque.</p>`;
+        step = `<p class="note"><b>Ataque:</b> toque no estado de onde parte o ataque.</p>`;
       } else if (!target) {
-        step = `<p class="note">De <b>${stateName(selected)}</b>: agora toque no estado vizinho que vai receber o ataque.</p>`;
+        step = `<p class="note">De <b>${sigla(selected)}</b>: toque no vizinho a atacar.</p>`;
       } else {
         const max = maxAttackers(game, selected);
         const buttons = Array.from(
@@ -909,21 +911,22 @@ function seatActions(game: GameState, player: Player): string {
           (_, i) =>
             `<button class="chip attack-count" data-attack="${i + 1}">${i + 1}<span>${pawnSvg(player.color).repeat(i + 1)}</span></button>`,
         ).join("");
-        step = `<p class="note"><b>${stateName(selected)}</b> → <b>${stateName(target)}</b><br/>Atacar com quantos soldados?</p>
-          <div class="chips">${buttons}</div>`;
+        // botões de quantidade e "Encerrar" na mesma linha, para caber sem rolar
+        step = `<p class="note"><b>${sigla(selected)}</b> → <b>${sigla(target)}</b>: com quantos?</p>
+          <div class="chips">${buttons}${confirmEndAttack ? "" : endAttack}</div>`;
       }
       if (confirmEndAttack) {
-        return `<p class="note warn">Encerrar os ataques? Depois disso não dá para atacar de novo nesta vez.</p>
+        return `<p class="note warn">Encerrar os ataques desta vez?</p>
           <div class="confirm">
             <button id="confirm-end-attack" class="primary">Sim, encerrar</button>
-            <button id="cancel-end-attack">Continuar atacando</button>
+            <button id="cancel-end-attack">Continuar</button>
           </div>`;
       }
-      return `${step}<button id="end-attack">Encerrar ataques</button>`;
+      return step.includes('id="end-attack"') ? step : `${step}${endAttack}`;
     }
     case "fortify":
-      return `<p class="note"><b>Remanejar</b> (opcional): toque num estado seu e depois num vizinho seu para mover 1 soldado. Máximo de 3 para cada vizinho, e sempre fica 1 em cada estado.</p>
-        ${selected ? `<p class="note">De <b>${stateName(selected)}</b>: ${movableArmies(game, selected)} soldado(s) disponível(is).</p>` : ""}
+      return `<p class="note"><b>Remanejar</b> (opcional): toque num estado seu e depois num vizinho (até 3 por vizinho).</p>
+        ${selected ? `<p class="note">De <b>${sigla(selected)}</b>: ${movableArmies(game, selected)} disponível(is).</p>` : ""}
         <button id="end-turn" class="primary">Passar a vez</button>`;
     default:
       return "";
@@ -937,8 +940,10 @@ function seatObjectives(game: GameState, player: Player): string {
     .map((id) => {
       const def = objectiveById(map, id);
       const { done, text } = def.progress(game, map, player.id);
-      return `<li class="${done ? "done" : ""}" title="${escapeHtml(def.description)}">
-        <span class="obj-title">🎯 ${def.title}</span>
+      // título curto: "Norte e Sul", "18 territórios"
+      const short = def.title.replace(/^Conquistar (o |a )?/, "").replace(/^Ter /, "");
+      return `<li class="${done ? "done" : ""}" title="${escapeHtml(def.title)}: ${escapeHtml(def.description)}">
+        <span class="obj-title">🎯 ${short}</span>
         <span class="obj-progress">${text}</span>
       </li>`;
     })
@@ -973,6 +978,20 @@ function seatHand(game: GameState, player: Player): string {
   return `<div class="hand${warn}">${cards}</div>`;
 }
 
+/**
+ * As cartas só aparecem no canto quando importam: no reforço do jogador da vez (para trocar)
+ * ou quando alguém abre o canto para espiar. Fora disso, o placar mostra só quantas são.
+ */
+function showHand(game: GameState, player: Player): boolean {
+  if (peeking.has(player.id)) return true;
+  return game.phase === "reinforce" && currentPlayer(game).id === player.id;
+}
+
+function handCount(game: GameState, player: Player): string {
+  const n = game.hands[player.id]?.length ?? 0;
+  return n > 0 ? ` · 🃏${n}` : "";
+}
+
 function renderSeat(game: GameState, seat: Seat): string {
   const player = game.players.find((p) => seats[p.id] === seat);
   if (!player) return `<section class="seat seat-${seat} empty"></section>`;
@@ -990,7 +1009,7 @@ function renderSeat(game: GameState, seat: Seat): string {
   if (out) classes.push("out");
   const head = `<div class="seat-head">
         ${place}<span class="swatch"></span><b class="seat-name">${nameOf(player)}${player.bot ? " 🤖" : ""}</b>
-        <span class="muted">${out ? "eliminado" : `${owned.length} estados · ${armies} soldados`}</span>
+        <span class="muted">${out ? "eliminado" : `${owned.length} estados · ${armies} soldados`}${handCount(game, player)}</span>
       </div>`;
 
   // Fora da ação, o canto mostra só o nome e o placar; um toque abre para espiar.
@@ -1001,6 +1020,7 @@ function renderSeat(game: GameState, seat: Seat): string {
       ${head.replace('<div class="seat-head">', '<div class="seat-head"><span class="peek-icon">▸</span>')}
     </section>`;
   }
+  const reserve = reserveFor(game, player);
   const close = active
     ? ""
     : `<button class="peek-close" data-peek="${player.id}" title="Fechar">✕</button>`;
@@ -1008,16 +1028,20 @@ function renderSeat(game: GameState, seat: Seat): string {
   return `
     <section class="${classes.join(" ")}" style="--pc:${player.color}">
       ${close}
-      ${head}
-      ${seatObjectives(game, player)}
-      ${seatHand(game, player)}
-      <div class="seat-body">
-        <div class="seat-dice">${seatDice(game, player)}</div>
-        ${seatBattleNote(game, player)}
-        ${seatTradeBonus(game, player)}
-        <div class="seat-actions">${seatActions(game, player)}</div>
+      <div class="seat-main">
+        ${head}
+        ${showHand(game, player) ? seatHand(game, player) : ""}
+        <div class="seat-body">
+          <div class="seat-dice">${seatDice(game, player)}</div>
+          <div class="seat-actions">
+            ${seatBattleNote(game, player)}
+            ${seatTradeBonus(game, player)}
+            ${seatActions(game, player)}
+          </div>
+        </div>
       </div>
-      <div class="reserve">${reserveHtml(reserveFor(game, player), player.color)}</div>
+      ${reserve > 0 ? `<div class="reserve">${reserveHtml(reserve, player.color)}</div>` : ""}
+      ${seatObjectives(game, player)}
     </section>`;
 }
 

@@ -280,9 +280,8 @@ button.primary {
   font-size: 0.8rem;
   border: 2px solid transparent;
   box-shadow: 0 4px 14px #0002;
-  /* conteúdo encostado na borda do jogador; se não couber, o canto rola em vez de cortar */
-  overflow-y: auto;
-  scrollbar-width: thin;
+  /* objetivos fixos embaixo; só o miolo (seat-main) rola, se um dia não couber */
+  overflow: hidden;
   transition:
     border-color 0.2s,
     box-shadow 0.2s;
@@ -344,16 +343,32 @@ button.primary {
   font-weight: 800;
 }
 
-.seat-body {
+/* miolo do canto: nome, cartas (no reforço), dados e ações — encostado embaixo */
+.seat-main {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+/* dados à esquerda e ações ao lado, para caber sem rolar */
+.seat-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
 }
 
 .seat-dice {
   display: flex;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 4px;
   min-height: 0;
+  /* folga para o dado chacoalhar sem fazer o canto rolar */
+  padding: 4px 0;
 }
 
 .seat-dice:empty {
@@ -361,13 +376,35 @@ button.primary {
 }
 
 .seat-actions {
+  flex: 1 1 130px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 
-.seat-actions:empty {
+.seat-actions:not(:has(*)) {
   display: none;
+}
+
+.seat .row {
+  display: flex;
+  gap: 4px;
+  align-items: stretch;
+}
+
+.seat .row > .primary {
+  flex: 1;
+}
+
+.seat button.small {
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.seat .note.muted {
+  font-size: 0.7rem;
 }
 
 .note {
@@ -439,7 +476,7 @@ button.primary {
 }
 
 .seat .die3d {
-  --size: 34px;
+  --size: 30px;
 }
 
 .die3d i {
@@ -909,8 +946,8 @@ button.primary {
 
 .seat .roll-attack,
 .seat .roll-defense {
-  font-size: 1rem;
-  padding: 10px;
+  font-size: 0.95rem;
+  padding: 8px;
 }
 
 .roll-attack {
@@ -1034,17 +1071,21 @@ button.primary {
 }
 
 /* ---- objetivos abertos ---- */
+/* objetivos: soltos na parte de baixo do canto, sempre visíveis */
 .objectives {
+  flex: none;
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 4px 0 0;
+  border-top: 1px dashed #0002;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 0.72rem;
+  flex-wrap: wrap;
+  gap: 3px;
+  font-size: 0.7rem;
 }
 
 .objectives li {
+  flex: 1 1 auto;
   display: flex;
   justify-content: space-between;
   gap: 6px;
@@ -1164,4 +1205,12 @@ button.primary {
 
 .bonus-note {
   color: #17703c;
+}
+
+.seat > .reserve {
+  flex: none;
+}
+
+.seat .chips .end-attack {
+  margin-left: auto;
 }
