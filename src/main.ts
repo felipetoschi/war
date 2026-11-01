@@ -24,6 +24,7 @@ import {
   movableTo,
   mustTrade,
   placeArmies,
+  playersStillPlacing,
   playersToRollForOrder,
   rollAttack,
   rollDefense,
@@ -92,6 +93,8 @@ let target: TerritoryId | null = null;
 let selectedCards: string[] = [];
 let lastBattle: LastBattle | null = null;
 let menuOpen = false;
+/** Cantos fora da ação que o jogador abriu com um toque, para espiar. */
+const peeking = new Set<PlayerId>();
 /** Quais lugares da tela inicial são bots. */
 const botSeats: boolean[] = Array.from({ length: MAX_PLAYERS }, () => false);
 let botsPaused = false;
@@ -198,6 +201,7 @@ function resetToSetup() {
   selectedCards = [];
   lastBattle = null;
   menuOpen = false;
+  peeking.clear();
   log.length = 0;
 }
 
@@ -291,10 +295,15 @@ function runBotAction(action: BotAction) {
         selectedCards = action.cards;
         onTrade();
         return;
-      case "place":
+      case "place": {
+        const wasPlacement = state!.phase === "placement";
         state = placeArmies(state!, map, action.territory, 1);
         sfx.place();
+        if (wasPlacement && state.phase !== "placement") {
+          addLog("Todos colocaram seus soldados: começa a rodada 1!");
+        }
         break;
+      }
       case "skip-reinforce":
         state = skipReinforce(state!);
         break;
@@ -328,13 +337,23 @@ function runBotAction(action: BotAction) {
 }
 function onTerritoryClick(id: TerritoryId) {
   if (!state || rolling || state.battle) return;
+  const owner = state.territories[id]?.owner;
+  if (state.phase === "placement") {
+    // Rodada inicial: todos ao mesmo tempo; o soldado vai para o dono do estado tocado.
+    const player = state.players.find((p) => p.id === owner);
+    if (!player || player.bot || !playersStillPlacing(state).includes(player.id)) return;
+    act(() => {
+      state = placeArmies(state!, map, id, 1);
+      sfx.place();
+      if (state.phase !== "placement") addLog("Todos colocaram seus soldados: começa a rodada 1!");
+    });
+    return;
+  }
   if (currentPlayer(state).bot) return; // vez de um bot: só assistir
   confirmEndAttack = false;
-  const owner = state.territories[id]?.owner;
   const me = currentPlayer(state).id;
   act(() => {
     switch (state!.phase) {
-      case "placement":
       case "reinforce":
         state = placeArmies(state!, map, id, 1);
         sfx.place();
@@ -534,8 +553,8 @@ function renderBoard(game: GameState): string {
     }
   }
   const focus = boardFocus(game);
-  const placing = game.phase === "placement" || game.phase === "reinforce";
   const me = currentPlayer(game).id;
+  const stillPlacing = game.phase === "placement" ? playersStillPlacing(game) : [];
   const involved = (id: TerritoryId) => focus?.from === id || focus?.to === id;
   // Quem está na ação é desenhado por último, para o contorno ficar por cima dos vizinhos.
   const ordered = [...map.territories].sort(
@@ -556,7 +575,10 @@ function renderBoard(game: GameState): string {
         classes.push("conquered");
       }
       if (targets.has(t.id)) classes.push("target");
-      const dim = (placing && ts.owner !== me) || (focus !== null && !involved(t.id));
+      const dim =
+        (game.phase === "placement" && !stillPlacing.includes(ts.owner)) ||
+        (game.phase === "reinforce" && ts.owner !== me) ||
+        (focus !== null && !involved(t.id));
       if (dim) classes.push("dim");
       const color = playerById(game, ts.owner).color;
       const path = (cls: string) =>
@@ -653,13 +675,29 @@ function renderRegions(game: GameState): string {
 }
 
 // ---- cantos dos jogadores ----
+/**
+ * Quem está na ação agora e tem o canto aberto: quem rola a ordem, quem ainda coloca os
+ * soldados iniciais, o jogador da vez (reforço, ataque, remanejamento) e quem defende.
+ */
+function inAction(game: GameState, player: Player): boolean {
+  switch (game.phase) {
+    case "order":
+      return true;
+    case "placement":
+      return playersStillPlacing(game).includes(player.id);
+    case "finished":
+      return game.winner === player.id;
+  }
+  if (currentPlayer(game).id === player.id) return true;
+  if (game.battle?.defender === player.id) return true;
+  // resultado da última batalha: o defensor vê os dados dele
+  return lastBattle?.defender === player.id && game.phase === "attack";
+}
+
 function reserveFor(game: GameState, player: Player): number {
   const index = game.players.indexOf(player);
   if (game.phase === "order") return INITIAL_ARMIES;
-  if (game.phase === "placement") {
-    if (index < game.currentPlayerIndex) return 0;
-    return index === game.currentPlayerIndex ? game.pendingReinforcements : INITIAL_ARMIES;
-  }
+  if (game.phase === "placement") return game.placementLeft[player.id] ?? 0;
   if (game.phase === "reinforce" && index === game.currentPlayerIndex) {
     return game.pendingReinforcements;
   }
@@ -796,9 +834,13 @@ function botSeatNote(game: GameState, player: Player): string {
     }
     return "";
   }
+  if (game.phase === "placement") {
+    return playersStillPlacing(game).includes(player.id)
+      ? note("🤖 Colocando os soldados…")
+      : note("Pronto! Aguardando os outros…");
+  }
   if (currentPlayer(game).id !== player.id || rolling) return "";
   const doing: Record<string, string> = {
-    placement: "🤖 Colocando os 3 soldados…",
     reinforce: `🤖 Reforçando (${game.pendingReinforcements} soldado(s))…`,
     attack: "🤖 Escolhendo um ataque…",
     fortify: "🤖 Remanejando soldados…",
@@ -822,13 +864,17 @@ function seatActions(game: GameState, player: Player): string {
       ? `<p class="note big">🏆 Você venceu!</p><p class="note">Por: ${winText(game)}.</p><button id="new-game" class="primary">Nova partida</button>`
       : "";
   }
+  if (game.phase === "placement") {
+    const left = game.placementLeft[player.id] ?? 0;
+    return left > 0
+      ? `<p class="note"><b>Rodada inicial:</b> coloque ${left === INITIAL_ARMIES ? "seus" : "mais"} ${left} soldado(s) tocando nos seus estados. Todos colocam ao mesmo tempo.</p>`
+      : `<p class="note">Pronto! Aguardando os outros colocarem…</p>`;
+  }
   const battle = battleActions(game, player);
   if (battle !== null) return battle;
   if (currentPlayer(game).id !== player.id || rolling) return "";
 
   switch (game.phase) {
-    case "placement":
-      return `<p class="note"><b>Rodada inicial:</b> coloque seus ${INITIAL_ARMIES} soldados tocando nos seus estados (pode dividir entre vários).</p>`;
     case "reinforce":
       return reinforceActions(game, player);
     case "attack": {
@@ -914,7 +960,9 @@ function renderSeat(game: GameState, seat: Seat): string {
   const owned = territoriesOf(game, player.id);
   const armies = owned.reduce((sum, id) => sum + game.territories[id]!.armies, 0);
   const isTurn =
-    game.phase !== "order" && game.phase !== "finished" && currentPlayer(game).id === player.id;
+    game.phase === "placement"
+      ? playersStillPlacing(game).includes(player.id)
+      : game.phase !== "order" && game.phase !== "finished" && currentPlayer(game).id === player.id;
   const isDefending = game.battle?.defender === player.id;
   const out = owned.length === 0;
   const place =
@@ -923,13 +971,27 @@ function renderSeat(game: GameState, seat: Seat): string {
   if (isTurn || (game.phase === "finished" && game.winner === player.id)) classes.push("current");
   if (isDefending) classes.push("defending");
   if (out) classes.push("out");
+  const head = `<div class="seat-head">
+        ${place}<span class="swatch"></span><b class="seat-name">${nameOf(player)}${player.bot ? " 🤖" : ""}</b>
+        <span class="muted">${out ? "eliminado" : `${owned.length} estados · ${armies} soldados`}</span>
+      </div>`;
+
+  // Fora da ação, o canto mostra só o nome e o placar; um toque abre para espiar.
+  const active = inAction(game, player);
+  if (!active && !peeking.has(player.id)) {
+    classes.push("collapsed");
+    return `<section class="${classes.join(" ")}" style="--pc:${player.color}" data-peek="${player.id}" title="Toque para ver objetivos e cartas">
+      ${head.replace('<div class="seat-head">', '<div class="seat-head"><span class="peek-icon">▸</span>')}
+    </section>`;
+  }
+  const close = active
+    ? ""
+    : `<button class="peek-close" data-peek="${player.id}" title="Fechar">✕</button>`;
 
   return `
     <section class="${classes.join(" ")}" style="--pc:${player.color}">
-      <div class="seat-head">
-        ${place}<span class="swatch"></span><b class="seat-name">${nameOf(player)}${player.bot ? " 🤖" : ""}</b>
-        <span class="muted">${out ? "eliminado" : `${owned.length} estados · ${armies} soldados`}</span>
-      </div>
+      ${close}
+      ${head}
       ${seatObjectives(game, player)}
       ${seatHand(game, player)}
       <div class="seat-body">
@@ -952,7 +1014,7 @@ function statusText(game: GameState): string {
     case "order":
       return "Quem começa? Cada jogador rola o dado no seu canto";
     case "placement":
-      return `Rodada inicial · ${who} coloca ${INITIAL_ARMIES} soldados`;
+      return `Rodada inicial · todos colocam ${INITIAL_ARMIES} soldados ao mesmo tempo`;
     case "reinforce":
       return `Rodada ${game.round} · ${who} · Reforço`;
     case "attack":
@@ -991,7 +1053,7 @@ function renderMenu(): string {
         <h2>Regras rápidas</h2>
         <ol class="rules">
           <li>Os estados são sorteados; os dados decidem a ordem.</li>
-          <li>Rodada inicial: cada um coloca ${INITIAL_ARMIES} soldados.</li>
+          <li>Rodada inicial: todos colocam ${INITIAL_ARMIES} soldados ao mesmo tempo; a partida começa quando todos terminam.</li>
           <li>Ataque só a estados vizinhos (que fazem divisa): escolha a origem, o alvo e com quantos soldados (até 3).</li>
           <li>O atacante rola os dados vermelhos e o defensor, os amarelos, cada um no seu canto. O maior vence; empate é da defesa.</li>
           <li>Quem conquistar pelo menos um estado no turno ganha uma carta no fim do turno (■ ▲ ● ou ★ coringa), visível para todos.</li>
@@ -1120,6 +1182,12 @@ function bindEvents() {
   on("#roll-defense", onRollDefense);
   on("#cancel-attack", () => act(() => (state = cancelAttack(state!))));
   on("[data-card]", (el) => onCardClick(el.dataset.card!));
+  on("[data-peek]", (el) => {
+    const id = el.dataset.peek!;
+    if (peeking.has(id)) peeking.delete(id);
+    else peeking.add(id);
+    render();
+  });
   on("#trade", onTrade);
   on("#skip-reinforce", () => act(() => (state = skipReinforce(state!))));
   on("#end-attack", () => {
