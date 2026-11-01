@@ -760,7 +760,7 @@ function seatDice(game: GameState, player: Player): string {
   return "";
 }
 
-/** Botões da batalha no canto do atacante e do defensor (sem textos: a instrução vai no centro). */
+/** Botões da batalha no canto do atacante e do defensor (a instrução vai na faixa do topo do canto). */
 function battleActions(game: GameState, player: Player): string | null {
   const pending = game.battle;
   if (!pending || rolling) return null;
@@ -792,7 +792,7 @@ function reinforceActions(game: GameState): string {
   return parts.join("");
 }
 
-/** Só os botões da jogada; as instruções aparecem no centro da tela (`centerMessage`). */
+/** Só os botões da jogada; as instruções aparecem em destaque no topo do canto (`turnMessage`). */
 function seatActions(game: GameState, player: Player): string {
   if (game.phase === "finished") {
     return game.winner === player.id
@@ -835,16 +835,16 @@ function seatActions(game: GameState, player: Player): string {
   }
 }
 
-// ---- instrução no centro da tela ----
-interface CenterMessage {
+// ---- instrução da jogada: em destaque no canto de quem precisa agir, fora do mapa ----
+interface TurnMessage {
   /** Para quem é a mensagem (o texto fica virado para o lado dele); null = para todos. */
   to: Player | null;
   html: string;
   tone?: "attack" | "defense" | "win";
 }
 
-/** A instrução da jogada, em destaque no meio da tela, para quem precisa agir agora. */
-function centerMessage(game: GameState): CenterMessage | null {
+/** A instrução da jogada para quem precisa agir agora. */
+function turnMessage(game: GameState): TurnMessage | null {
   const line = (text: string, cls = "") => `<p class="${cls}">${text}</p>`;
   const sub = (text: string) => line(text, "sub");
   if (game.phase === "finished") {
@@ -855,8 +855,6 @@ function centerMessage(game: GameState): CenterMessage | null {
       html: line(`🏆 ${nameOf(winner)} venceu!`, "big") + sub(`Por: ${winText(game)}.`),
     };
   }
-  if (rolling) return null; // dados rolando: o centro fica livre
-
   if (game.phase === "order") {
     const pending = playersToRollForOrder(game);
     const tie = pending.some((id) => (game.orderRolls[id]?.length ?? 0) > 0);
@@ -1012,15 +1010,18 @@ function centerMessage(game: GameState): CenterMessage | null {
   }
 }
 
-function renderCenterMessage(game: GameState): string {
-  const msg = centerMessage(game);
-  if (!msg) return "";
-  const seat = msg.to ? seats[msg.to.id] : null;
-  const flipped = seat === "tl" || seat === "tr";
-  const who = msg.to ? `<p class="who"><span class="swatch"></span>${nameOf(msg.to)}</p>` : "";
-  return `<div class="center-msg${flipped ? " flipped" : ""}${msg.tone ? ` tone-${msg.tone}` : ""}" style="--pc:${msg.to?.color ?? "#1f2d3a"}">
-      ${who}${msg.html}
-    </div>`;
+/**
+ * A instrução aparece no topo do canto do jogador (que já fica virado para ele), em destaque,
+ * e nunca sobre o mapa. Sem destinatário (ordem de jogo), aparece no canto de todos.
+ */
+function renderTurnMessage(game: GameState, player: Player): string {
+  const msg = turnMessage(game);
+  if (!msg || (msg.to && msg.to.id !== player.id)) return "";
+  const classes = ["turn-msg"];
+  if (msg.tone) classes.push(`tone-${msg.tone}`);
+  // dados rolando: a faixa continua no lugar (o canto não pula), só fica apagada
+  if (rolling) classes.push("rolling");
+  return `<div class="${classes.join(" ")}">${msg.html}</div>`;
 }
 
 function seatObjectives(game: GameState, player: Player): string {
@@ -1119,6 +1120,7 @@ function renderSeat(game: GameState, seat: Seat): string {
     <section class="${classes.join(" ")}" style="--pc:${player.color}">
       ${close}
       <div class="seat-main">
+        ${renderTurnMessage(game, player)}
         ${head}
         ${showHand(game, player) ? seatHand(game, player) : ""}
         <div class="seat-body">
@@ -1218,7 +1220,6 @@ function render() {
       ${SEATS.map((s) => renderSeat(view, s)).join("")}
       <main class="board-wrap">
         ${renderBoard(view)}
-        ${renderCenterMessage(view)}
         <div class="status">${statusText(view)}</div>
         ${toolbar()}
       </main>
