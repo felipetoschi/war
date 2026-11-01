@@ -18,10 +18,9 @@ Valores marcados com ⚙️ são configuráveis no código (`src/game/rules.ts` 
 
 3. **Ordem de jogo:** cada jogador rola um dado; quem tirar mais começa, e a ordem segue do maior
    para o menor. Empatados rolam de novo entre si. **Toda a partida segue essa ordem.**
-4. **Rodada inicial:** **todos ao mesmo tempo**, cada jogador coloca **3 soldados** ⚙️ nos seus
-   estados — todos num só estado ou divididos entre vários; o soldado vai para o dono do estado
-   tocado. Ninguém ataca nesta rodada. **A partida só começa quando todos terminaram**, e aí segue
-   a ordem sorteada.
+4. **Rodada inicial:** **um por vez, na ordem sorteada**, cada jogador coloca **3 soldados** ⚙️
+   nos seus estados — todos num só estado ou divididos entre vários. Ninguém ataca nesta rodada.
+   **A rodada 1 só começa depois que todos tiverem colocado**, com o primeiro da ordem.
 5. **Ataque:** começa pelo primeiro da ordem. O jogador:
    1. toca no estado **de onde parte o ataque** (precisa ter 2 ou mais soldados);
    2. toca no estado **que vai receber o ataque** — **só estados que fazem divisa**;
@@ -136,7 +135,7 @@ jogador.
   ficam apagados. Quem está sendo atacado tem o canto aceso em amarelo.
 - **Cartas** e **objetivos** visíveis no canto de cada jogador.
 - **Só quem está na ação tem o canto aberto:** o jogador da vez (reforço, ataque ou
-  remanejamento), quem está defendendo e, na rodada inicial, quem ainda está colocando soldados.
+  remanejamento, ou colocando os soldados da rodada inicial) e quem está defendendo.
   Os outros cantos viram uma etiqueta com o nome, os estados e os soldados — um toque nela abre o
   canto para espiar objetivos e cartas (✕ fecha).
 - **Soldadinhos como peças físicas**, na borda de cada jogador: os soldados ainda a posicionar

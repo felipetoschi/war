@@ -47,8 +47,8 @@ export interface TerritoryState {
 
 /**
  * - order: estados já sorteados; cada jogador rola um dado para decidir quem começa
- * - placement: rodada inicial, todos posicionam 3 soldados ao mesmo tempo (sem ataques);
- *   a partida só começa quando todos terminaram
+ * - placement: rodada inicial, um jogador por vez (na ordem sorteada) posiciona 3 soldados,
+ *   sem ataques; a rodada 1 só começa quando todos terminaram
  * - reinforce / attack / fortify: fases de um turno (sem reforço na rodada 1)
  */
 export type Phase = "order" | "placement" | "reinforce" | "attack" | "fortify" | "finished";
@@ -102,7 +102,7 @@ export interface GameState {
   round: number;
   /** Soldados ainda a posicionar no reforço do jogador da vez. */
   pendingReinforcements: number;
-  /** Rodada inicial: soldados que cada jogador ainda tem para posicionar (todos ao mesmo tempo). */
+  /** Rodada inicial: soldados que cada jogador ainda tem para posicionar (um por vez, na ordem). */
   placementLeft: Partial<Record<PlayerId, number>>;
   /** Soldados que chegaram por remanejamento neste turno (não podem se mover de novo). */
   fortified: Partial<Record<TerritoryId, number>>;

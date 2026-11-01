@@ -221,8 +221,8 @@ export function playersStillPlacing(state: GameState): PlayerId[] {
 
 /**
  * Posiciona soldados na rodada inicial ou no reforço do turno.
- * Na rodada inicial todos posicionam ao mesmo tempo: o soldado vai para o dono do estado.
- * Quando o último termina, começa a rodada 1, na ordem sorteada.
+ * Na rodada inicial, um jogador por vez, na ordem sorteada; quando o último termina,
+ * começa a rodada 1, com o primeiro da ordem.
  */
 export function placeArmies(
   state: GameState,
@@ -231,8 +231,8 @@ export function placeArmies(
   amount: number,
 ): GameState {
   assertPhase(state, "placement", "reinforce");
-  if (state.phase === "placement") return placeInitial(state, map, territory, amount);
   assertOwnedByCurrent(state, territory);
+  if (state.phase === "placement") return placeInitial(state, map, territory, amount);
   if (state.phase === "reinforce" && mustTrade(state)) {
     throw new Error(`Com ${MAX_HAND} cartas ou mais, é obrigatório trocar antes`);
   }
@@ -253,17 +253,21 @@ function placeInitial(
   territory: TerritoryId,
   amount: number,
 ): GameState {
-  const owner = state.territories[territory]?.owner;
-  if (!owner) throw new Error(`Estado desconhecido: ${territory}`);
+  const owner = currentPlayer(state).id;
   const left = state.placementLeft[owner] ?? 0;
-  if (left === 0) throw new Error("Esse jogador já colocou todos os seus soldados");
   if (!Number.isInteger(amount) || amount < 1 || amount > left) {
     throw new Error("Quantidade de soldados inválida");
   }
   const next = structuredClone(state);
   next.territories[territory]!.armies += amount;
   next.placementLeft[owner] = left - amount;
-  if (playersStillPlacing(next).length > 0) return next;
+  if (left - amount > 0) return next;
+  // Terminou: passa para o próximo da ordem que ainda não colocou.
+  const following = next.players.findIndex((p) => (next.placementLeft[p.id] ?? 0) > 0);
+  if (following >= 0) {
+    next.currentPlayerIndex = following;
+    return next;
+  }
   // Todos colocaram: começa a rodada 1 (ataques), na ordem sorteada.
   next.placementLeft = {};
   next.round = 1;
