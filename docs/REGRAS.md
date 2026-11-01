@@ -50,8 +50,8 @@ Valores marcados com ⚙️ são configuráveis no código (`src/game/rules.ts` 
    terceiro, ficando com 1.
 
 9. **Reforço:** a partir da **rodada 2**, no começo da sua vez, o jogador ganha **1 soldado a cada
-   2 estados** ⚙️ que possui, mais o bônus de cada região que dominar inteira, e pode **trocar
-   cartas** por mais soldados.
+   2 estados** ⚙️ que possui — **no mínimo 3** ⚙️, mesmo com poucos estados —, mais o bônus de
+   cada região que dominar inteira, e pode **trocar cartas** por mais soldados.
 10. **Vitória:** vence quem, **na sua vez**, cumprir **qualquer um dos seus 2 objetivos abertos**
     (veja abaixo) — ou quem for o **último jogador vivo**. Quem perde todos os estados está fora.
 
@@ -116,7 +116,13 @@ jogador.
 
 ## Configurações da mesa (tablet)
 
-- **Mapa no centro, sem bordas**, sobre o "mar" que ocupa a tela toda.
+- **Mapa no centro, sem bordas**, sobre o "mar" que ocupa a tela toda. O mapa tem **tamanho fixo**:
+  o maior que cabe na tela, deixando só uma faixa mínima para os cantos — ele não muda de tamanho
+  durante a partida. Os cantos são compactos e, se faltar espaço, rolam por dentro.
+- **Ação em destaque no mapa:** ao escolher um ataque, durante a batalha e no resultado, o estado
+  atacante fica com brilho **vermelho**, o atacado pisca em **amarelo**, uma **seta** liga os dois
+  e os marcadores deles crescem; o resto do mapa esmaece. No resultado aparecem os soldados
+  perdidos de cada lado (−1, −2…) e, na conquista, o estado pisca na cor nova.
 - **Jogadores nos 4 cantos do tablet**, como num tabuleiro físico sobre a mesa: o **1º e o 2º
   jogador embaixo** (esquerda e direita) e o **3º e o 4º em cima** (direita e esquerda). Os de cima
   veem o seu canto **virado para eles** (girado 180°).
@@ -162,6 +168,5 @@ Na tela inicial, cada jogador pode ser **👤 Humano** ou **🤖 Bot** — inclu
 - [ ] **Ataque entre estados sem divisa** (antigo ataque pelo mar, com penalidade nos dados):
       retirado por enquanto — só se ataca quem faz divisa. A numeração do litoral continua nos
       dados do mapa (`coastIndex`) caso a ideia volte de outra forma.
-- [ ] **Mínimo de reforço:** hoje, quem tem só 1 estado e nenhuma região não recebe soldados.
 - [ ] **Calibrar objetivos:** ajustar os números (18 territórios, mínimo de 3 conquistas no
       sorteio) depois de algumas partidas.

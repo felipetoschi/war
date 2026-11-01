@@ -20,6 +20,8 @@ export const MAX_DEFENSE_DICE = 3;
 export const INITIAL_ARMIES = 3;
 /** A cada quantos estados o jogador ganha 1 soldado no reforço. */
 export const TERRITORIES_PER_REINFORCEMENT = 2;
+/** Mínimo de soldados no reforço, para quem tem poucos estados (antes do bônus de região). */
+export const MIN_REINFORCEMENT = 3;
 /** No remanejamento, no máximo quantos soldados vão de um estado para cada vizinho, por turno. */
 export const MAX_FORTIFY_PER_NEIGHBOR = 3;
 
@@ -137,9 +139,14 @@ export function controlsRegion(
     .every((t) => state.territories[t.id]?.owner === player);
 }
 
-/** Reforço: 1 soldado a cada 2 estados + bônus de cada região dominada. */
+/**
+ * Reforço: 1 soldado a cada 2 estados (no mínimo 3) + bônus de cada região dominada.
+ */
 export function reinforcementsFor(state: GameState, map: GameMap, player: PlayerId): number {
-  const base = Math.floor(territoriesOf(state, player).length / TERRITORIES_PER_REINFORCEMENT);
+  const base = Math.max(
+    MIN_REINFORCEMENT,
+    Math.floor(territoriesOf(state, player).length / TERRITORIES_PER_REINFORCEMENT),
+  );
   const bonus = map.regions
     .filter((r) => controlsRegion(state, map, player, r.id))
     .reduce((sum, r) => sum + r.bonus, 0);
