@@ -1214,3 +1214,85 @@ button.primary {
 .seat .chips .end-attack {
   margin-left: auto;
 }
+
+/* ---- instrução da jogada: no meio da tela, virada para quem precisa agir ---- */
+.center-msg {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: max-content;
+  max-width: min(78%, 460px);
+  padding: 10px 18px 12px;
+  border-radius: 16px;
+  background: #fbf7eef0;
+  border: 3px solid var(--pc);
+  box-shadow:
+    0 8px 24px #0004,
+    0 0 0 4px #fff8;
+  text-align: center;
+  /* o toque passa direto para o mapa embaixo */
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* jogadores do lado de cima leem a mensagem virada para eles */
+.center-msg.flipped {
+  transform: translate(-50%, -50%) rotate(180deg);
+}
+
+.center-msg p {
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.center-msg p.sub {
+  margin-top: 4px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.center-msg p.big {
+  font-size: 1.5rem;
+}
+
+.center-msg .who {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--pc);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.center-msg .who .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--pc);
+}
+
+.center-msg.tone-attack {
+  box-shadow:
+    0 8px 24px #0004,
+    0 0 0 4px #d63c3155;
+}
+
+.center-msg.tone-defense {
+  border-color: var(--defense);
+  box-shadow:
+    0 8px 24px #0004,
+    0 0 18px var(--defense);
+}
+
+.center-msg.tone-win {
+  border-color: var(--accent);
+  box-shadow:
+    0 8px 24px #0004,
+    0 0 24px var(--accent);
+}

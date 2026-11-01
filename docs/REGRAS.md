@@ -136,9 +136,13 @@ jogador.
 - **Cartas** e **objetivos** visíveis no canto de cada jogador. Os **objetivos ficam fixos na parte
   de baixo** do canto (título curto e progresso, lado a lado). As cartas aparecem no reforço (para
   trocar) ou ao espiar; fora disso, o placar mostra quantas são (🃏3).
-- **Canto compacto, sem rolar:** dados e botões de ataque e defesa ficam lado a lado (dados à
-  esquerda, "Rolar ataque"/"Rolar defesa" ao lado), com textos curtos; os soldadinhos de reserva
-  só aparecem quando há soldados a colocar.
+- **Instrução no meio da tela:** o que fazer agora aparece em destaque no centro do mapa, com o
+  nome e a cor de quem precisa agir, **virado para o lado dele** (girado 180° para quem está em
+  cima). Ex.: "Defenda Rondônia! Role 3 dados amarelos no seu canto". A mensagem não bloqueia o
+  toque no mapa.
+- **Canto discreto, sem textos:** só o nome e o placar, os dados, os botões da jogada ("Rolar
+  ataque", "Rolar defesa", quantos soldados, "Encerrar ataques", "Passar a vez"…) e os objetivos.
+  Os soldadinhos de reserva só aparecem quando há soldados a colocar.
 - **Só quem está na ação tem o canto aberto:** o jogador da vez (reforço, ataque ou
   remanejamento, ou colocando os soldados da rodada inicial) e quem está defendendo.
   Os outros cantos viram uma etiqueta com o nome, os estados e os soldados — um toque nela abre o
