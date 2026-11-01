@@ -36,6 +36,8 @@ export interface Player {
   id: PlayerId;
   name: string;
   color: string;
+  /** Jogador controlado pelo computador. */
+  bot?: boolean;
 }
 
 export interface TerritoryState {

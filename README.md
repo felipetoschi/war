@@ -9,6 +9,7 @@ no **mapa do Brasil** — 26 territórios (os estados, com Goiás/DF juntos), na
 - **Dados como se fossem físicos** (vermelho ataca, amarelo defende): cada jogador rola o seu, no seu canto.
 - **Cartas de troca** (■ ▲ ● e coringa ★), visíveis para todos: uma por turno com conquista, trocadas por soldados.
 - **Sons e música** de marcha militar, gerados pelo próprio jogo (sem arquivos de áudio).
+- **Bots 🤖:** qualquer jogador pode ser bot, inclusive todos, para assistir.
 - **Soldadinhos** na borda de cada jogador. Só se ataca estado que faz divisa.
 - Reforço: 1 soldado a cada 2 estados + bônus de região, a partir da rodada 2.
 - **2 objetivos abertos** por jogador: conquistar as regiões sorteadas ou ter 18 territórios — ou ser o último vivo.
@@ -36,6 +37,7 @@ src/
     types.ts       # tipos do estado da partida
     brasil.ts      # estados, fronteiras, litoral e regiões
     map.ts         # consultas ao mapa (vizinhança)
+    bot.ts         # bots: decidem uma ação por vez (soldados, cartas, ataques, remanejamento)
     cards.ts       # cartas de troca: baralho, trocas válidas e valor da troca
     dice.ts        # rolagem e comparação de dados
     objectives.ts  # objetivos abertos (regiões ou 18 territórios): progresso e sorteio

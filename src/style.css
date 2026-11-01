@@ -244,14 +244,15 @@ button.primary {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
   gap: 8px;
   padding: 12px;
   border-radius: 18px;
   background: var(--seat);
   border: 3px solid transparent;
   box-shadow: 0 4px 14px #0002;
-  overflow: hidden;
+  /* conteúdo encostado na borda do jogador; se não couber, o canto rola em vez de cortar */
+  overflow-y: auto;
+  scrollbar-width: thin;
   transition:
     border-color 0.2s,
     box-shadow 0.2s;
@@ -278,6 +279,7 @@ button.primary {
 }
 
 .seat-head {
+  margin-top: auto;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -367,7 +369,7 @@ button.primary {
 
 /* ---- dados físicos (vermelho ataca, amarelo defende) ---- */
 .die3d {
-  --size: 54px;
+  --size: 48px;
   width: var(--size);
   height: var(--size);
   padding: calc(var(--size) * 0.14);
@@ -840,4 +842,15 @@ button.primary {
 
 .confirm button {
   flex: 1;
+}
+
+/* ---- bots ---- */
+.name-input .who-toggle {
+  min-width: 112px;
+  padding: 8px 10px;
+}
+
+.bot-note {
+  color: var(--muted);
+  font-style: italic;
 }

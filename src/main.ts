@@ -1,4 +1,5 @@
 import "./style.css";
+import { botToAct, chooseBotAction, newBotMemory, type BotAction } from "./game/bot";
 import { BRASIL_MAP } from "./game/brasil";
 import { hasValidSet, isValidSet, MAX_HAND, OWNED_CARD_BONUS, tradeValue } from "./game/cards";
 import type { BattleResult } from "./game/dice";
@@ -90,6 +91,18 @@ let target: TerritoryId | null = null;
 let selectedCards: string[] = [];
 let lastBattle: LastBattle | null = null;
 let menuOpen = false;
+/** Quais lugares da tela inicial são bots. */
+const botSeats: boolean[] = Array.from({ length: MAX_PLAYERS }, () => false);
+let botsPaused = false;
+/** Velocidade dos bots: índice em BOT_SPEEDS. */
+let botSpeed = 1;
+const BOT_SPEEDS = [
+  { icon: "🐢", label: "lenta", factor: 1.8 },
+  { icon: "▶️", label: "normal", factor: 1 },
+  { icon: "⚡", label: "rápida", factor: 0.4 },
+];
+let botTimer: number | null = null;
+let botMemory = newBotMemory();
 /** O jogador tocou em "Encerrar ataques" e falta confirmar. */
 let confirmEndAttack = false;
 const log: string[] = [];
@@ -170,6 +183,10 @@ function act(update: () => void) {
 
 function resetToSetup() {
   confirmEndAttack = false;
+  if (botTimer !== null) clearTimeout(botTimer);
+  botTimer = null;
+  botsPaused = false;
+  botMemory = newBotMemory();
   gameId++;
   rolling = null;
   frozen = null;
@@ -194,10 +211,11 @@ function renderPlayersScreen(): string {
   const inputs = Array.from(
     { length: playerCount },
     (_, i) => `
-      <label class="name-input">
+      <div class="name-input">
         ${pawnSvg(COLORS[i]!)}
-        <input data-name="${i}" maxlength="14" placeholder="Jogador ${i + 1}" value="${escapeHtml(names[i]!)}" />
-      </label>`,
+        <input data-name="${i}" maxlength="14" placeholder="${botSeats[i] ? "Bot" : "Jogador"} ${i + 1}" value="${escapeHtml(names[i]!)}" />
+        <button class="chip who-toggle ${botSeats[i] ? "active" : ""}" data-bot="${i}">${botSeats[i] ? "🤖 Bot" : "👤 Humano"}</button>
+      </div>`,
   ).join("");
 
   return `
@@ -207,7 +225,9 @@ function renderPlayersScreen(): string {
         <h2>1. Quantos jogadores?</h2>
         <div class="chips">${options}</div>
         <h2>2. Nome dos jogadores</h2>
+        <p class="muted">Toque em 👤/🤖 para escolher quem é humano e quem é bot.</p>
         <div class="names">${inputs}</div>
+        <button id="all-bots" class="link">🤖 Só bots (para assistir)</button>
         <p class="muted">Cada jogador fica num canto do tablet. Os 26 territórios serão sorteados e,
           depois, os dados decidem quem começa.</p>
         <button id="deal" class="primary">Sortear os estados 🎲</button>
@@ -218,8 +238,96 @@ function renderPlayersScreen(): string {
 }
 
 // ---- ações ----
+function doEndTurn() {
+  selected = null;
+  target = null;
+  selectedCards = [];
+  lastBattle = null;
+  const player = currentPlayer(state!);
+  const before = state!.hands[player.id]?.length ?? 0;
+  state = endTurn(state!, map);
+  const hand = state.hands[player.id] ?? [];
+  if (hand.length > before) {
+    addLog(`🃏 ${nameOf(player)} ganhou a carta ${cardLabel(hand[hand.length - 1]!)}`);
+    sfx.card();
+  }
+  sfx.turn();
+}
+
+// ---- bots ----
+const hasBots = () => state?.players.some((p) => p.bot) ?? false;
+
+/** Agenda a próxima ação de bot (uma por vez, com pausa para dar para acompanhar). */
+function scheduleBots() {
+  if (botTimer !== null || !state || screen !== "game" || rolling || menuOpen || botsPaused) {
+    return;
+  }
+  if (!botToAct(state)) return;
+  const placing = state.phase === "placement" || state.phase === "reinforce";
+  const delay = (placing ? 380 : 800) * BOT_SPEEDS[botSpeed]!.factor;
+  const id = gameId;
+  botTimer = window.setTimeout(() => {
+    botTimer = null;
+    if (id !== gameId || !state || rolling || menuOpen || botsPaused) return;
+    const actor = botToAct(state);
+    if (actor) runBotAction(chooseBotAction(state, map, actor, botMemory));
+  }, delay);
+}
+
+function runBotAction(action: BotAction) {
+  try {
+    switch (action.type) {
+      case "roll-order":
+        rollOrder(action.players);
+        return;
+      case "roll-attack":
+        onRollAttack();
+        return;
+      case "roll-defense":
+        onRollDefense();
+        return;
+      case "trade":
+        selectedCards = action.cards;
+        onTrade();
+        return;
+      case "place":
+        state = placeArmies(state!, map, action.territory, 1);
+        sfx.place();
+        break;
+      case "skip-reinforce":
+        state = skipReinforce(state!);
+        break;
+      case "declare":
+        selected = action.from;
+        target = action.to;
+        lastBattle = null;
+        state = declareAttack(state!, map, action.from, action.to, action.soldiers);
+        sfx.attack();
+        break;
+      case "end-attack":
+        selected = null;
+        target = null;
+        state = endAttackPhase(state!);
+        break;
+      case "fortify":
+        selected = action.from;
+        state = fortify(state!, map, action.from, action.to, 1);
+        sfx.place();
+        break;
+      case "end-turn":
+        doEndTurn();
+        break;
+    }
+  } catch (error) {
+    // Não deve acontecer; se acontecer, pausa os bots para não repetir o erro.
+    botsPaused = true;
+    addLog(`⚠ Bot: ${(error as Error).message} (bots pausados)`);
+  }
+  render();
+}
 function onTerritoryClick(id: TerritoryId) {
   if (!state || rolling || state.battle) return;
+  if (currentPlayer(state).bot) return; // vez de um bot: só assistir
   confirmEndAttack = false;
   const owner = state.territories[id]?.owner;
   const me = currentPlayer(state).id;
@@ -572,7 +680,41 @@ function reinforceActions(game: GameState, player: Player): string {
   return parts.join("");
 }
 
+/** O que aparece no canto de um bot: só o que ele está fazendo (sem botões). */
+function botSeatNote(game: GameState, player: Player): string {
+  const note = (text: string) => `<p class="note bot-note">${text}</p>`;
+  if (game.phase === "order") {
+    return playersToRollForOrder(game).includes(player.id) && !rolling
+      ? note("🤖 Rolando o dado…")
+      : "";
+  }
+  const battle = game.battle;
+  if (battle) {
+    const other = (id: string) => nameOf(playerById(game, id));
+    if (player.id === battle.attacker) {
+      return battle.attackRolls
+        ? note(`Aguardando a defesa de ${other(battle.defender)}…`)
+        : note(`🤖 Atacando ${stateName(battle.to)} com ${battle.soldiers}…`);
+    }
+    if (player.id === battle.defender) {
+      return battle.attackRolls
+        ? note("🤖 Defendendo…")
+        : note(`${other(battle.attacker)} vai atacar ${stateName(battle.to)}…`);
+    }
+    return "";
+  }
+  if (currentPlayer(game).id !== player.id || rolling) return "";
+  const doing: Record<string, string> = {
+    placement: "🤖 Colocando os 3 soldados…",
+    reinforce: `🤖 Reforçando (${game.pendingReinforcements} soldado(s))…`,
+    attack: "🤖 Escolhendo um ataque…",
+    fortify: "🤖 Remanejando soldados…",
+  };
+  return note(doing[game.phase] ?? "");
+}
+
 function seatActions(game: GameState, player: Player): string {
+  if (player.bot && game.phase !== "finished") return botSeatNote(game, player);
   if (game.phase === "order") {
     if (rolling) return "";
     if (playersToRollForOrder(game).includes(player.id)) {
@@ -692,7 +834,7 @@ function renderSeat(game: GameState, seat: Seat): string {
   return `
     <section class="${classes.join(" ")}" style="--pc:${player.color}">
       <div class="seat-head">
-        ${place}<span class="swatch"></span><b class="seat-name">${nameOf(player)}</b>
+        ${place}<span class="swatch"></span><b class="seat-name">${nameOf(player)}${player.bot ? " 🤖" : ""}</b>
         <span class="muted">${out ? "eliminado" : `${owned.length} estados · ${armies} soldados`}</span>
       </div>
       ${seatObjectives(game, player)}
@@ -736,7 +878,13 @@ function toolbar(): string {
   const music = `<button id="toggle-music" class="tool ${musicOn() ? "" : "off"}" title="Música">🎵</button>`;
   const sound = `<button id="toggle-sfx" class="tool" title="Efeitos sonoros">${sfxOn() ? "🔊" : "🔇"}</button>`;
   const menu = screen === "game" ? `<button id="menu" class="tool" title="Menu">☰</button>` : "";
-  return `<div class="toolbar">${music}${sound}${fs}${menu}</div>`;
+  const speed = BOT_SPEEDS[botSpeed]!;
+  const bots =
+    screen === "game" && hasBots()
+      ? `<button id="toggle-bots" class="tool" title="${botsPaused ? "Continuar" : "Pausar"} os bots">${botsPaused ? "▶" : "⏸"}</button>
+         <button id="bot-speed" class="tool" title="Velocidade dos bots: ${speed.label}">${speed.icon}</button>`
+      : "";
+  return `<div class="toolbar">${bots}${music}${sound}${fs}${menu}</div>`;
 }
 
 function renderMenu(): string {
@@ -792,6 +940,7 @@ function render() {
   }
   bindEvents();
   animateDice(app);
+  scheduleBots();
 }
 
 function on(selector: string, handler: (el: HTMLElement) => void) {
@@ -832,11 +981,29 @@ function bindEvents() {
     .forEach((input) =>
       input.addEventListener("input", () => (names[Number(input.dataset.name)] = input.value)),
     );
+  on("[data-bot]", (el) => {
+    const i = Number(el.dataset.bot);
+    botSeats[i] = !botSeats[i];
+    render();
+  });
+  on("#all-bots", () => {
+    botSeats.fill(true);
+    render();
+  });
+  on("#toggle-bots", () => {
+    botsPaused = !botsPaused;
+    render();
+  });
+  on("#bot-speed", () => {
+    botSpeed = (botSpeed + 1) % BOT_SPEEDS.length;
+    render();
+  });
   on("#deal", () => {
     const players = Array.from({ length: playerCount }, (_, i) => ({
       id: `p${i + 1}`,
-      name: names[i]!.trim() || `Jogador ${i + 1}`,
+      name: names[i]!.trim() || `${botSeats[i] ? "Bot" : "Jogador"} ${i + 1}`,
       color: COLORS[i]!,
+      bot: botSeats[i],
     }));
     seats = Object.fromEntries(players.map((p, i) => [p.id, SEATS[i]!]));
     state = createGame(map, players);
@@ -878,23 +1045,7 @@ function bindEvents() {
       state = endAttackPhase(state!);
     }),
   );
-  on("#end-turn", () =>
-    act(() => {
-      selected = null;
-      target = null;
-      selectedCards = [];
-      lastBattle = null;
-      const player = currentPlayer(state!);
-      const before = state!.hands[player.id]?.length ?? 0;
-      state = endTurn(state!, map);
-      const hand = state.hands[player.id] ?? [];
-      if (hand.length > before) {
-        addLog(`🃏 ${nameOf(player)} ganhou a carta ${cardLabel(hand[hand.length - 1]!)}`);
-        sfx.card();
-      }
-      sfx.turn();
-    }),
-  );
+  on("#end-turn", () => act(doEndTurn));
   on("#new-game", () => {
     resetToSetup();
     render();

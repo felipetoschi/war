@@ -137,6 +137,26 @@ jogador.
   **⛶ tela cheia** e **☰ menu** (regras, bônus, histórico e nova partida).
 - O celular terá um layout próprio depois.
 
+## Bots 🤖
+
+Na tela inicial, cada jogador pode ser **👤 Humano** ou **🤖 Bot** — inclusive o primeiro. Com
+**"Só bots"**, dá para só assistir a uma partida inteira.
+
+- O bot joga sozinho, passo a passo, com as mesmas animações e sons: rola o dado da ordem, coloca
+  soldados, troca cartas, ataca, rola os dados e remaneja.
+- **Como o bot pensa** (só com o que está à vista na mesa, como um humano):
+  - **soldados:** coloca na fronteira, de preferência perto das regiões do seu objetivo e de
+    vizinhos fracos;
+  - **cartas:** troca sempre que pode, preferindo cartas de estados seus (+2);
+  - **ataque:** só ataca com vantagem clara (mais soldados atacando do que defendendo), dando
+    prioridade a alvos do seu objetivo e a estados com 1 soldado; ataca com o máximo de dados;
+  - **remanejamento:** leva soldados do interior para a fronteira.
+- **Bot × humano:** quando o bot ataca um humano, quem rola a defesa é o humano (no seu canto);
+  quando um humano ataca o bot, o bot rola a defesa sozinho.
+- Na vez de um bot, os humanos só assistem (o mapa não responde ao toque).
+- Botões sobre o mapa (quando há bots): **⏸/▶ pausar e continuar** e **velocidade** (🐢 lenta,
+  ▶️ normal, ⚡ rápida).
+
 ## Em aberto (para decidir)
 
 - [ ] **Ataque entre estados sem divisa** (antigo ataque pelo mar, com penalidade nos dados):
