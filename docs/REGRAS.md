@@ -112,7 +112,10 @@ jogador.
 - **Valor da troca** ⚙️: cresce a cada troca feita na partida — 4, 6, 8, 10, 12, 15, e depois
   +5 a cada troca (20, 25, 30…).
 - **Bônus de estado:** se uma das cartas trocadas for de um **estado que o jogador domina**, ele
-  ganha **+2 soldados nesse estado** (a carta mostra o selo "+2").
+  ganha **+2 soldados nesse estado** (a carta mostra o selo "+2"). Esses 2 soldados ficam
+  **obrigatoriamente nesse estado**: o jogo os coloca lá na hora da troca, e o estado fica marcado
+  no mapa com um anel verde e "+2" durante o reforço. Só os soldados da troca (4, 6, 8…) vão para
+  a reserva e podem ser colocados em qualquer estado do jogador.
 - Com **5 cartas ou mais** ⚙️, a troca é **obrigatória** antes de posicionar os soldados.
 - Quem **elimina** um jogador fica com as cartas dele.
 

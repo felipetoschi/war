@@ -190,6 +190,9 @@ button.primary {
   --gap: 8px;
   /* faixa mínima de cada canto */
   --seat-min: 170px;
+  /* altura da tela sem contar barras do navegador que aparecem e somem (svh): o mapa não
+     muda de tamanho quando elas mexem */
+  --vh: 100vh;
   height: 100vh;
   height: 100dvh;
   width: 100vw;
@@ -198,11 +201,17 @@ button.primary {
   gap: var(--gap);
 }
 
+@supports (height: 100svh) {
+  #app.table {
+    --vh: 100svh;
+  }
+}
+
 /* Tablet deitado: cantos à esquerda e à direita, mapa no meio. */
 @media (orientation: landscape) {
   #app.table {
     --map-size: min(
-      calc((100dvh - 2 * var(--pad)) * var(--map-ratio)),
+      calc((var(--vh) - 2 * var(--pad)) * var(--map-ratio)),
       calc(100vw - 2 * var(--pad) - 2 * var(--gap) - 2 * var(--seat-min))
     );
     grid-template-columns: minmax(0, 1fr) var(--map-size) minmax(0, 1fr);
@@ -218,7 +227,7 @@ button.primary {
   #app.table {
     --map-size: min(
       calc((100vw - 2 * var(--pad)) / var(--map-ratio)),
-      calc(100dvh - 2 * var(--pad) - 2 * var(--gap) - 2 * var(--seat-min))
+      calc(var(--vh) - 2 * var(--pad) - 2 * var(--gap) - 2 * var(--seat-min))
     );
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) var(--map-size) minmax(0, 1fr);
@@ -1133,4 +1142,26 @@ button.primary {
   font-size: 0.75rem;
   background: transparent;
   color: var(--muted);
+}
+
+/* ---- bônus da troca: +2 no estado da carta ---- */
+.board .bonus-ring {
+  fill: none;
+  stroke: #1f9a52;
+  stroke-width: 4;
+  pointer-events: none;
+}
+
+.board .bonus-mark {
+  fill: #fff;
+  font-size: 16px;
+  font-weight: 900;
+  paint-order: stroke;
+  stroke: #1f9a52;
+  stroke-width: 5px;
+  stroke-linejoin: round;
+}
+
+.bonus-note {
+  color: #17703c;
 }
