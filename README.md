@@ -6,12 +6,12 @@ no **mapa do Brasil** — 26 territórios (os estados, com Goiás/DF juntos), na
 - De **2 a 4 jogadores**, cada um num canto do tablet: 1º e 2º embaixo, 3º e 4º em cima (virados para eles).
 - Os territórios são **sorteados**; depois, **dados** decidem a ordem de jogo.
 - Rodada inicial com **3 soldados** para cada, um por vez, antes da 1ª rodada; ataque escolhendo origem, alvo e quantos soldados.
-- O mapa fica fixo, no maior tamanho; só o canto de quem está na ação fica aberto.
+- O mapa fica fixo, no maior tamanho; o que fazer aparece num painel ao lado do mapa, virado para quem precisa agir.
 - **Dados como se fossem físicos** (vermelho ataca, amarelo defende): cada jogador rola o seu, no seu canto.
-- **Cartas de troca** (■ ▲ ● e coringa ★), visíveis para todos: uma por turno com conquista, trocadas por soldados.
+- **Cartas de troca** (■ ▲ ● e coringa ★), visíveis para todos no placar do menu: uma por turno com conquista, trocadas por soldados.
 - **Sons e música** de marcha militar, gerados pelo próprio jogo (sem arquivos de áudio).
 - **Bots 🤖:** qualquer jogador pode ser bot, inclusive todos, para assistir.
-- **Soldadinhos** na borda de cada jogador. Só se ataca estado que faz divisa.
+- Cantos mínimos: só os dados e os objetivos. Só se ataca estado que faz divisa.
 - Reforço: 1 soldado a cada 2 estados (no mínimo 3) + bônus de região, a partir da rodada 2.
 - **2 objetivos abertos** por jogador: conquistar as regiões sorteadas ou ter 18 territórios — ou ser o último vivo.
 
@@ -50,7 +50,7 @@ src/
     brasil-svg.ts  # contornos dos estados e posição dos marcadores
     dice.ts        # dados com pontinhos e animação de rolagem
     fullscreen.ts  # botão de tela cheia
-    pieces.ts      # soldadinhos (peças) na borda de cada jogador
+    pieces.ts      # soldadinhos (nos botões de quantos soldados atacam)
     audio.ts       # efeitos sonoros e trilhas de marcha, gerados com a Web Audio API
   main.ts          # interface (mapa em SVG)
   style.css
@@ -81,7 +81,6 @@ Ajustes que só o dono do repositório faz em _Settings_:
 ## Próximos passos
 
 - [ ] Decidir os pontos em aberto de [docs/REGRAS.md](docs/REGRAS.md)
-- [ ] Jogadores controlados por IA
 - [ ] Salvar/carregar partida
 - [ ] Multijogador online
 

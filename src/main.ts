@@ -42,7 +42,7 @@ import {
   onFullscreenChange,
   toggleFullscreen,
 } from "./ui/fullscreen";
-import { pawnSvg, reserveHtml } from "./ui/pieces";
+import { pawnSvg } from "./ui/pieces";
 import { musicOn, sfx, sfxOn, toggleMusic, toggleSfx, unlockAudio } from "./ui/audio";
 
 const map = BRASIL_MAP;
@@ -95,8 +95,6 @@ let lastBattle: LastBattle | null = null;
 let menuOpen = false;
 /** Estados que receberam o bônus de +2 da última troca (ficam em destaque no reforço). */
 let tradeBonus: TerritoryId[] = [];
-/** Cantos fora da ação que o jogador abriu com um toque, para espiar. */
-const peeking = new Set<PlayerId>();
 /** Quais lugares da tela inicial são bots. */
 const botSeats: boolean[] = Array.from({ length: MAX_PLAYERS }, () => false);
 let botsPaused = false;
@@ -204,7 +202,6 @@ function resetToSetup() {
   lastBattle = null;
   menuOpen = false;
   tradeBonus = [];
-  peeking.clear();
   log.length = 0;
 }
 
@@ -684,33 +681,6 @@ function renderRegions(game: GameState): string {
 }
 
 // ---- cantos dos jogadores ----
-/**
- * Quem está na ação agora e tem o canto aberto: quem rola a ordem, o jogador da vez
- * (rodada inicial, reforço, ataque, remanejamento) e quem defende.
- */
-function inAction(game: GameState, player: Player): boolean {
-  switch (game.phase) {
-    case "order":
-      return true;
-    case "finished":
-      return game.winner === player.id;
-  }
-  if (currentPlayer(game).id === player.id) return true;
-  if (game.battle?.defender === player.id) return true;
-  // resultado da última batalha: o defensor vê os dados dele
-  return lastBattle?.defender === player.id && game.phase === "attack";
-}
-
-function reserveFor(game: GameState, player: Player): number {
-  const index = game.players.indexOf(player);
-  if (game.phase === "order") return INITIAL_ARMIES;
-  if (game.phase === "placement") return game.placementLeft[player.id] ?? 0;
-  if (game.phase === "reinforce" && index === game.currentPlayerIndex) {
-    return game.pendingReinforcements;
-  }
-  return 0;
-}
-
 const diceRow = (values: number[], kind: "attack" | "defense", spin = false, lost?: boolean[]) =>
   values.map((v, i) => dieHtml(v, kind, { rolling: spin, lost: lost?.[i] })).join("");
 
@@ -760,18 +730,20 @@ function seatDice(game: GameState, player: Player): string {
   return "";
 }
 
-/** Botões da batalha no canto do atacante e do defensor (a instrução vai na faixa do topo do canto). */
-function battleActions(game: GameState, player: Player): string | null {
+/** Botão de rolar, junto dos dados no canto do jogador (ordem de jogo, ataque e defesa). */
+function rollButton(game: GameState, player: Player): string {
+  if (player.bot || rolling) return "";
+  if (game.phase === "order") {
+    if (!playersToRollForOrder(game).includes(player.id)) return "";
+    return `<button class="primary roll" data-roll="${player.id}">🎲 Rolar</button>`;
+  }
   const pending = game.battle;
-  if (!pending || rolling) return null;
+  if (!pending) return "";
   if (player.id === pending.attacker && !pending.attackRolls) {
-    return `<div class="row">
-        <button class="primary roll-attack" id="roll-attack">🎲 Rolar ataque</button>
-        <button id="cancel-attack" class="small" title="Desistir do ataque">Desistir</button>
-      </div>`;
+    return `<button class="primary roll roll-attack" id="roll-attack">🎲 Rolar ataque</button>`;
   }
   if (player.id === pending.defender && pending.attackRolls) {
-    return `<button class="primary roll-defense" id="roll-defense">🎲 Rolar defesa</button>`;
+    return `<button class="primary roll roll-defense" id="roll-defense">🎲 Rolar defesa</button>`;
   }
   return "";
 }
@@ -792,25 +764,25 @@ function reinforceActions(game: GameState): string {
   return parts.join("");
 }
 
-/** Só os botões da jogada; as instruções aparecem em destaque no topo do canto (`turnMessage`). */
-function seatActions(game: GameState, player: Player): string {
+/** Os botões da jogada (menos o de rolar, que fica junto dos dados), no painel da jogada. */
+function panelActions(game: GameState, player: Player): string {
   if (game.phase === "finished") {
     return game.winner === player.id
       ? `<button id="new-game" class="primary">Nova partida</button>`
       : "";
   }
-  if (player.bot) return "";
-  if (game.phase === "order") {
-    if (rolling || !playersToRollForOrder(game).includes(player.id)) return "";
-    return `<button class="primary" data-roll="${player.id}">🎲 Rolar dado</button>`;
+  if (player.bot || rolling || game.phase === "order") return "";
+  const pending = game.battle;
+  if (pending) {
+    return player.id === pending.attacker && !pending.attackRolls
+      ? `<button id="cancel-attack" class="small" title="Desistir do ataque">Desistir do ataque</button>`
+      : "";
   }
-  const battle = battleActions(game, player);
-  if (battle !== null) return battle;
-  if (currentPlayer(game).id !== player.id || rolling) return "";
+  if (currentPlayer(game).id !== player.id) return "";
 
   switch (game.phase) {
     case "reinforce":
-      return reinforceActions(game);
+      return seatHand(game, player) + reinforceActions(game);
     case "attack": {
       if (confirmEndAttack) {
         return `<div class="confirm">
@@ -835,7 +807,7 @@ function seatActions(game: GameState, player: Player): string {
   }
 }
 
-// ---- instrução da jogada: em destaque no canto de quem precisa agir, fora do mapa ----
+// ---- painel da jogada: ao lado do mapa, do lado de quem precisa agir e virado para ele ----
 interface TurnMessage {
   /** Para quem é a mensagem (o texto fica virado para o lado dele); null = para todos. */
   to: Player | null;
@@ -864,7 +836,7 @@ function turnMessage(game: GameState): TurnMessage | null {
         ? line("Empate!") +
           sub(`${pending.map((id) => nameOf(playerById(game, id))).join(" e ")} rolam de novo.`)
         : line("Quem começa?") +
-          sub("Cada um toca em 🎲 Rolar dado no seu canto; quem tirar mais começa."),
+          sub("Cada um toca em 🎲 Rolar, no seu canto; quem tirar mais começa."),
     };
   }
 
@@ -893,7 +865,7 @@ function turnMessage(game: GameState): TurnMessage | null {
         sub(
           defender.bot
             ? `🤖 ${nameOf(defender)} vai rolar a defesa…`
-            : `${nameOf(defender)}, role ${battle.defenseDice} dado(s) amarelo(s) no seu canto.`,
+            : `Role ${battle.defenseDice} dado(s) amarelo(s) no seu canto.`,
         ),
     };
   }
@@ -950,7 +922,7 @@ function turnMessage(game: GameState): TurnMessage | null {
       if (hasValidSet(hand)) {
         parts.push(
           sub(
-            `Troca de cartas (+${tradeValue(game.trades)}): toque em 3 cartas no seu canto. Carta de estado seu: +${OWNED_CARD_BONUS} nele.`,
+            `Troca de cartas (+${tradeValue(game.trades)}): toque em 3 cartas abaixo. Carta de estado seu: +${OWNED_CARD_BONUS} nele.`,
           ),
         );
       }
@@ -991,7 +963,7 @@ function turnMessage(game: GameState): TurnMessage | null {
         tone: "attack",
         html:
           line(`<b>${stateName(selected)}</b> → <b>${stateName(target)}</b>`) +
-          sub("Com quantos soldados? Escolha no seu canto."),
+          sub("Com quantos soldados atacar?"),
       };
     }
     case "fortify":
@@ -1011,17 +983,31 @@ function turnMessage(game: GameState): TurnMessage | null {
 }
 
 /**
- * A instrução aparece no topo do canto do jogador (que já fica virado para ele), em destaque,
- * e nunca sobre o mapa. Sem destinatário (ordem de jogo), aparece no canto de todos.
+ * O painel da jogada fica no espaço livre ao lado do mapa (nunca por cima dele), do lado de
+ * quem precisa agir e virado para essa pessoa: nome, o que fazer, as cartas (na troca) e os
+ * botões. Sem destinatário (ordem de jogo), aparece dos dois lados da mesa.
  */
-function renderTurnMessage(game: GameState, player: Player): string {
+function renderTurnPanel(game: GameState): string {
   const msg = turnMessage(game);
-  if (!msg || (msg.to && msg.to.id !== player.id)) return "";
-  const classes = ["turn-msg"];
+  if (!msg) return "";
+  if (!msg.to) return turnPanel(msg, "bl") + turnPanel(msg, "tr");
+  const seat = seats[msg.to.id];
+  const round = game.round > 0 && game.phase !== "finished" ? `rodada ${game.round}` : "";
+  return seat ? turnPanel(msg, seat, panelActions(game, msg.to), round) : "";
+}
+
+function turnPanel(msg: TurnMessage, seat: Seat, actions = "", round = ""): string {
+  const classes = ["turn-panel", `for-${seat}`];
   if (msg.tone) classes.push(`tone-${msg.tone}`);
-  // dados rolando: a faixa continua no lugar (o canto não pula), só fica apagada
+  // dados rolando: o painel continua no lugar, só fica apagado
   if (rolling) classes.push("rolling");
-  return `<div class="${classes.join(" ")}">${msg.html}</div>`;
+  const who = msg.to
+    ? `<p class="who"><span class="swatch"></span>${nameOf(msg.to)}${msg.to.bot ? " 🤖" : ""}${round ? `<span class="round">${round}</span>` : ""}</p>`
+    : "";
+  return `<section class="${classes.join(" ")}" style="--pc:${msg.to?.color ?? "#1f2d3a"}">
+      ${who}<div class="msg">${msg.html}</div>
+      ${actions ? `<div class="panel-actions">${actions}</div>` : ""}
+    </section>`;
 }
 
 function seatObjectives(game: GameState, player: Player): string {
@@ -1069,95 +1055,26 @@ function seatHand(game: GameState, player: Player): string {
   return `<div class="hand${warn}">${cards}</div>`;
 }
 
-/**
- * As cartas só aparecem no canto quando importam: no reforço do jogador da vez (para trocar)
- * ou quando alguém abre o canto para espiar. Fora disso, o placar mostra só quantas são.
- */
-function showHand(game: GameState, player: Player): boolean {
-  if (peeking.has(player.id)) return true;
-  return game.phase === "reinforce" && currentPlayer(game).id === player.id;
-}
-
-function handCount(game: GameState, player: Player): string {
-  const n = game.hands[player.id]?.length ?? 0;
-  return n > 0 ? ` · 🃏${n}` : "";
-}
-
+/** O canto do jogador: só os dados (com o botão de rolar) e os objetivos. */
 function renderSeat(game: GameState, seat: Seat): string {
   const player = game.players.find((p) => seats[p.id] === seat);
   if (!player) return `<section class="seat seat-${seat} empty"></section>`;
-  const owned = territoriesOf(game, player.id);
-  const armies = owned.reduce((sum, id) => sum + game.territories[id]!.armies, 0);
   const isTurn =
     game.phase !== "order" && game.phase !== "finished" && currentPlayer(game).id === player.id;
-  const isDefending = game.battle?.defender === player.id;
-  const out = owned.length === 0;
-  const place =
-    game.phase !== "order" ? `<span class="place">${game.players.indexOf(player) + 1}º</span>` : "";
+  const out = territoriesOf(game, player.id).length === 0;
   const classes = ["seat", `seat-${seat}`];
   if (isTurn || (game.phase === "finished" && game.winner === player.id)) classes.push("current");
-  if (isDefending) classes.push("defending");
+  if (game.battle?.defender === player.id) classes.push("defending");
   if (out) classes.push("out");
-  const head = `<div class="seat-head">
-        ${place}<span class="swatch"></span><b class="seat-name">${nameOf(player)}${player.bot ? " 🤖" : ""}</b>
-        <span class="muted">${out ? "eliminado" : `${owned.length} estados · ${armies} soldados`}${handCount(game, player)}</span>
-      </div>`;
-
-  // Fora da ação, o canto mostra só o nome e o placar; um toque abre para espiar.
-  const active = inAction(game, player);
-  if (!active && !peeking.has(player.id)) {
-    classes.push("collapsed");
-    return `<section class="${classes.join(" ")}" style="--pc:${player.color}" data-peek="${player.id}" title="Toque para ver objetivos e cartas">
-      ${head.replace('<div class="seat-head">', '<div class="seat-head"><span class="peek-icon">▸</span>')}
-    </section>`;
-  }
-  const reserve = reserveFor(game, player);
-  const close = active
-    ? ""
-    : `<button class="peek-close" data-peek="${player.id}" title="Fechar">✕</button>`;
-
+  const dice = seatDice(game, player) + rollButton(game, player);
   return `
-    <section class="${classes.join(" ")}" style="--pc:${player.color}">
-      ${close}
-      <div class="seat-main">
-        ${renderTurnMessage(game, player)}
-        ${head}
-        ${showHand(game, player) ? seatHand(game, player) : ""}
-        <div class="seat-body">
-          <div class="seat-dice">${seatDice(game, player)}</div>
-          <div class="seat-actions">${seatActions(game, player)}</div>
-        </div>
-      </div>
-      ${reserve > 0 ? `<div class="reserve">${reserveHtml(reserve, player.color)}</div>` : ""}
-      ${seatObjectives(game, player)}
+    <section class="${classes.join(" ")}" style="--pc:${player.color}" title="${escapeHtml(nameOf(player))}">
+      ${dice ? `<div class="seat-dice">${dice}</div>` : ""}
+      ${out ? `<p class="seat-out">eliminado</p>` : seatObjectives(game, player)}
     </section>`;
 }
 
-// ---- centro: status, barra de ferramentas e menu ----
-function statusText(game: GameState): string {
-  const who = nameOf(currentPlayer(game));
-  if (game.battle) {
-    const b = game.battle;
-    return `${nameOf(playerById(game, b.attacker))} ataca ${sigla(b.to)} de ${nameOf(playerById(game, b.defender))}`;
-  }
-  switch (game.phase) {
-    case "order":
-      return "Quem começa? Cada jogador rola o dado no seu canto";
-    case "placement": {
-      const done = game.players.length - playersStillPlacing(game).length;
-      return `Rodada inicial · ${who} coloca ${INITIAL_ARMIES} soldados · ${done + 1} de ${game.players.length}`;
-    }
-    case "reinforce":
-      return `Rodada ${game.round} · ${who} · Reforço`;
-    case "attack":
-      return `Rodada ${game.round} · ${who} · Ataque`;
-    case "fortify":
-      return `Rodada ${game.round} · ${who} · Remanejamento`;
-    case "finished":
-      return `🏆 ${nameOf(playerById(game, game.winner!))} venceu — ${winText(game)}!`;
-  }
-}
-
+// ---- barra de ferramentas e menu ----
 function toolbar(): string {
   const fs = fullscreenSupported()
     ? `<button id="fullscreen" class="tool" title="Tela cheia">${isFullscreen() ? "🗗" : "⛶"}</button>`
@@ -1179,16 +1096,32 @@ function renderMenu(): string {
   const regions = map.regions
     .map((r) => `<li><span>${r.name}</span><b>+${r.bonus}</b></li>`)
     .join("");
+  const score = state.players
+    .map((p) => {
+      const owned = territoriesOf(state!, p.id);
+      const armies = owned.reduce((sum, id) => sum + state!.territories[id]!.armies, 0);
+      const hand = (state!.hands[p.id] ?? []).map((c) => SYMBOL_GLYPH[c.symbol]).join(" ");
+      return `<tr style="--pc:${p.color}">
+        <td><span class="swatch"></span>${nameOf(p)}${p.bot ? " 🤖" : ""}</td>
+        <td>${owned.length || "fora"}</td><td>${armies}</td><td>${hand || "—"}</td>
+      </tr>`;
+    })
+    .join("");
   return `
     <div class="overlay">
       <section class="card menu">
+        <h2>Placar</h2>
+        <table class="score">
+          <thead><tr><th>Jogador</th><th>Estados</th><th>Soldados</th><th>Cartas</th></tr></thead>
+          <tbody>${score}</tbody>
+        </table>
         <h2>Regras rápidas</h2>
         <ol class="rules">
           <li>Os estados são sorteados; os dados decidem a ordem.</li>
           <li>Rodada inicial: um por vez, na ordem, cada um coloca ${INITIAL_ARMIES} soldados; a rodada 1 só começa quando todos tiverem colocado.</li>
           <li>Ataque só a estados vizinhos (que fazem divisa): escolha a origem, o alvo e com quantos soldados (até 3).</li>
-          <li>O atacante rola os dados vermelhos e o defensor, os amarelos, cada um no seu canto. O maior vence; empate é da defesa.</li>
-          <li>Quem conquistar pelo menos um estado no turno ganha uma carta no fim do turno (■ ▲ ● ou ★ coringa), visível para todos.</li>
+          <li>O atacante rola os dados vermelhos e o defensor, os amarelos, cada um no seu canto. O que fazer aparece no painel ao lado do mapa, virado para quem precisa agir. O maior vence; empate é da defesa.</li>
+          <li>Quem conquistar pelo menos um estado no turno ganha uma carta no fim do turno (■ ▲ ● ou ★ coringa), visível para todos (aqui no placar).</li>
           <li>3 cartas iguais ou 3 diferentes valem uma troca por soldados (próxima: +${tradeValue(state.trades)}). Carta de estado seu: +${OWNED_CARD_BONUS} obrigatoriamente nesse estado (colocados na hora). Com ${MAX_HAND} cartas, a troca é obrigatória.</li>
           <li>Remanejar: até 3 soldados de um estado para cada vizinho, sempre deixando 1.</li>
           <li>A partir da rodada 2: 1 soldado a cada 2 estados (no mínimo ${MIN_REINFORCEMENT}) + bônus de região.</li>
@@ -1220,9 +1153,9 @@ function render() {
       ${SEATS.map((s) => renderSeat(view, s)).join("")}
       <main class="board-wrap">
         ${renderBoard(view)}
-        <div class="status">${statusText(view)}</div>
         ${toolbar()}
       </main>
+      ${renderTurnPanel(view)}
       ${renderMenu()}`;
   }
   bindEvents();
@@ -1314,12 +1247,6 @@ function bindEvents() {
   on("#roll-defense", onRollDefense);
   on("#cancel-attack", () => act(() => (state = cancelAttack(state!))));
   on("[data-card]", (el) => onCardClick(el.dataset.card!));
-  on("[data-peek]", (el) => {
-    const id = el.dataset.peek!;
-    if (peeking.has(id)) peeking.delete(id);
-    else peeking.add(id);
-    render();
-  });
   on("#trade", onTrade);
   on("#skip-reinforce", () => act(() => (state = skipReinforce(state!))));
   on("#end-attack", () => {

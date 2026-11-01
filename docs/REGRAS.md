@@ -97,8 +97,8 @@ nome e o bônus; quando alguém domina a região inteira, a etiqueta fica na cor
 
 ### Cartas de troca 🃏
 
-Como no War original, com uma diferença: **as cartas ficam visíveis para todos**, no canto de cada
-jogador.
+Como no War original, com uma diferença: **as cartas ficam visíveis para todos**, no placar do
+menu ☰.
 
 - O baralho tem **28 cartas**: uma para cada território, com um símbolo — **quadrado ■, triângulo ▲
   ou bola ●** (9, 9 e 8) — e **2 coringas ★**.
@@ -121,8 +121,8 @@ jogador.
 ## Configurações da mesa (tablet)
 
 - **Mapa no centro, sem bordas**, sobre o "mar" que ocupa a tela toda. O mapa tem **tamanho fixo**:
-  o maior que cabe na tela, deixando só uma faixa mínima para os cantos — ele não muda de tamanho
-  durante a partida. Os cantos são compactos e, se faltar espaço, rolam por dentro.
+  o maior que cabe na tela, deixando só uma faixa mínima para os cantos e o painel da jogada — ele
+  não muda de tamanho durante a partida. Se faltar espaço, cantos e painel rolam por dentro.
 - **Ação em destaque no mapa:** ao escolher um ataque, durante a batalha e no resultado, o estado
   atacante fica com brilho **vermelho**, o atacado pisca em **amarelo**, uma **seta** liga os dois
   e os marcadores deles crescem; o resto do mapa esmaece. No resultado aparecem os soldados
@@ -133,24 +133,19 @@ jogador.
 - **Dados como se fossem físicos**, no canto de cada jogador: **vermelho ataca, amarelo defende**.
   Cada um rola o seu, no seu lado. Eles chacoalham antes de parar; os que perderam a comparação
   ficam apagados. Quem está sendo atacado tem o canto aceso em amarelo.
-- **Cartas** e **objetivos** visíveis no canto de cada jogador. Os **objetivos ficam fixos na parte
-  de baixo** do canto (título curto e progresso, lado a lado). As cartas aparecem no reforço (para
-  trocar) ou ao espiar; fora disso, o placar mostra quantas são (🃏3).
-- **Instrução em destaque, fora do mapa:** o que fazer agora aparece numa **faixa na cor do
-  jogador, no topo do canto de quem precisa agir** — já virada para o lado dele, porque o canto
-  de cima é girado. Ex.: "Defenda Rondônia! Role 3 dados amarelos no seu canto" (faixa amarela).
-  **Nada fica por cima do mapa**, para não atrapalhar a jogada. Na rolagem da ordem, a faixa
-  aparece no canto de todos.
-- **Canto discreto:** além da faixa da instrução, só o nome e o placar, os dados, os botões da
-  jogada ("Rolar ataque", "Rolar defesa", quantos soldados, "Encerrar ataques", "Passar a
-  vez"…) e os objetivos. Os soldadinhos de reserva só aparecem quando há soldados a colocar.
-- **Só quem está na ação tem o canto aberto:** o jogador da vez (reforço, ataque ou
-  remanejamento, ou colocando os soldados da rodada inicial) e quem está defendendo.
-  Os outros cantos viram uma etiqueta com o nome, os estados e os soldados — um toque nela abre o
-  canto para espiar objetivos e cartas (✕ fecha).
-- **Soldadinhos como peças físicas**, na borda de cada jogador: os soldados ainda a posicionar
-  ficam ali e vão saindo conforme são colocados no mapa.
-- O canto do jogador da vez fica aceso na cor dele, com as instruções e os botões da jogada.
+- **Canto mínimo:** cada canto é um cartão pequeno, na cor do jogador, só com **os dados** (e o
+  botão de rolar, quando é a vez dele: ordem de jogo, ataque ou defesa) e **os 2 objetivos**, com
+  o progresso. O canto do jogador da vez fica aceso na cor dele; quem está sendo atacado, em
+  amarelo.
+- **Painel da jogada, ao lado do mapa:** o que fazer agora aparece em destaque num painel **fixo
+  no espaço livre ao lado do mapa** — nunca por cima dele —, **do lado de quem precisa agir e
+  virado para essa pessoa** (girado 180° para quem está em cima). Tablet deitado: no meio da
+  lateral, entre os dois cantos daquele lado. Tablet em pé: entre os dois cantos de cima ou de
+  baixo. O painel traz o nome e a rodada, a instrução (ex.: "Defenda Rondônia! Role 1 dado
+  amarelo no seu canto"), as cartas na hora da troca e os botões da jogada (quantos soldados,
+  "Encerrar ataques", "Passar a vez"…). Na rolagem da ordem, aparece dos dois lados da mesa.
+- **Cartas visíveis para todos** no **placar do menu ☰** (estados, soldados e cartas de cada
+  jogador); o jogador da vez vê as suas no painel, no reforço, para trocar.
 - **Cores claras:** mar azul-claro e cantos cor de papel.
 - **Sons** gerados pelo próprio jogo: dados rolando, soldadinho posto, rufar ao declarar ataque,
   clarim na conquista, pancada quando a defesa segura, estrondo na eliminação, cartas, chamada de
@@ -158,7 +153,7 @@ jogador.
 - **Música de fundo** em loop: trilhas originais de marcha militar (caixa, bumbo, tímpanos e
   metais), que se alternam a cada poucas repetições.
 - Botões sobre o mapa: **🎵 música** e **🔊 efeitos** (liga/desliga, fica salvo no aparelho),
-  **⛶ tela cheia** e **☰ menu** (regras, bônus, histórico e nova partida).
+  **⛶ tela cheia** e **☰ menu** (placar com as cartas, regras, bônus, histórico e nova partida).
 - O celular terá um layout próprio depois.
 
 ## Bots 🤖

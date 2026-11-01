@@ -158,10 +158,6 @@ button.primary {
   gap: 10px;
 }
 
-.name-input .reserve:empty {
-  opacity: 0.35;
-}
-
 .pawn {
   width: 22px;
   height: 30px;
@@ -207,7 +203,7 @@ button.primary {
   }
 }
 
-/* Tablet deitado: cantos à esquerda e à direita, mapa no meio. */
+/* Tablet deitado: cantos nos 4 cantos da tela, painel da jogada no meio de cada lado. */
 @media (orientation: landscape) {
   #app.table {
     --map-size: min(
@@ -215,26 +211,51 @@ button.primary {
       calc(100vw - 2 * var(--pad) - 2 * var(--gap) - 2 * var(--seat-min))
     );
     grid-template-columns: minmax(0, 1fr) var(--map-size) minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
     grid-template-areas:
       "tl map tr"
+      "pl map pr"
       "bl map br";
+  }
+
+  .turn-panel.for-tl,
+  .turn-panel.for-bl {
+    grid-area: pl;
+  }
+
+  .turn-panel.for-tr,
+  .turn-panel.for-br {
+    grid-area: pr;
   }
 }
 
-/* Tablet em pé: cantos em cima e embaixo, mapa no meio. */
+/* Tablet em pé: cantos em cima e embaixo, painel da jogada entre eles. */
 @media (orientation: portrait) {
   #app.table {
     --map-size: min(
       calc((100vw - 2 * var(--pad)) / var(--map-ratio)),
       calc(var(--vh) - 2 * var(--pad) - 2 * var(--gap) - 2 * var(--seat-min))
     );
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr) auto;
     grid-template-rows: minmax(0, 1fr) var(--map-size) minmax(0, 1fr);
     grid-template-areas:
-      "tl tr"
-      "map map"
-      "bl br";
+      "tl pt tr"
+      "map map map"
+      "bl pb br";
+  }
+
+  .seat {
+    width: clamp(140px, 22vw, 200px);
+  }
+
+  .turn-panel.for-tl,
+  .turn-panel.for-tr {
+    grid-area: pt;
+  }
+
+  .turn-panel.for-bl,
+  .turn-panel.for-br {
+    grid-area: pb;
   }
 }
 
@@ -267,29 +288,33 @@ button.primary {
   filter: drop-shadow(0 6px 10px #0005);
 }
 
-/* ---- canto de cada jogador ---- */
+/* ---- canto de cada jogador: só os dados e os objetivos ---- */
 .seat {
   --pc: #888;
+  align-self: end;
   min-height: 0;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 7px 8px;
-  border-radius: 14px;
+  gap: 4px;
+  padding: 5px 6px;
+  border-radius: 12px;
   background: var(--seat);
   font-size: 0.8rem;
   border: 2px solid transparent;
-  box-shadow: 0 4px 14px #0002;
-  /* objetivos fixos embaixo; só o miolo (seat-main) rola, se um dia não couber */
-  overflow: hidden;
+  border-top: 5px solid var(--pc);
+  box-shadow: 0 3px 10px #0002;
+  overflow-y: auto;
+  scrollbar-width: thin;
   transition:
     border-color 0.2s,
     box-shadow 0.2s;
 }
 
-/* Jogadores sentados do lado de cima veem o painel virado para eles. */
+/* Jogadores sentados do lado de cima veem o canto virado para eles. */
 .seat-tl,
 .seat-tr {
+  align-self: start;
   transform: rotate(180deg);
 }
 
@@ -301,110 +326,57 @@ button.primary {
 
 .seat.current {
   border-color: var(--pc);
-  box-shadow: 0 0 22px var(--pc);
+  box-shadow: 0 0 18px var(--pc);
 }
 
 .seat.out {
   opacity: 0.45;
 }
 
-.seat-head {
-  margin-top: auto;
+.seat-out {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* dados (e o botão de rolar) numa fileira só */
+.seat-dice {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 8px;
+  align-items: center;
+  gap: 4px;
+  /* folga para o dado chacoalhar sem fazer o canto rolar */
+  padding: 3px 0;
 }
 
-.seat-head .swatch {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: var(--pc);
-  align-self: center;
+.seat button.roll {
+  flex: 1 1 auto;
+  padding: 7px 8px;
+  border-radius: 8px;
+  font-size: 0.85rem;
 }
 
-.seat-name {
-  font-size: 0.95rem;
-}
-
-.seat .muted {
-  font-size: 0.75rem;
-}
-
-/* botões dentro dos cantos: menores */
-.seat button {
+/* botões dentro do painel da jogada: menores */
+.turn-panel button {
   padding: 6px 10px;
   border-radius: 8px;
 }
 
-.place {
-  color: #b07800;
-  font-weight: 800;
-}
-
-/* miolo do canto: nome, cartas (no reforço), dados e ações — encostado embaixo */
-.seat-main {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-}
-
-/* dados à esquerda e ações ao lado, para caber sem rolar */
-.seat-body {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 6px;
-}
-
-.seat-dice {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  min-height: 0;
-  /* folga para o dado chacoalhar sem fazer o canto rolar */
-  padding: 4px 0;
-}
-
-.seat-dice:empty {
-  display: none;
-}
-
-.seat-actions {
-  flex: 1 1 130px;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.seat-actions:not(:has(*)) {
-  display: none;
-}
-
-.seat .row {
+.turn-panel .row {
   display: flex;
   gap: 4px;
   align-items: stretch;
 }
 
-.seat .row > .primary {
+.turn-panel .row > .primary {
   flex: 1;
 }
 
-.seat button.small {
+.turn-panel button.small {
   padding: 4px 8px;
   font-size: 0.75rem;
   font-weight: 600;
-}
-
-.seat .note.muted {
-  font-size: 0.7rem;
 }
 
 .note {
@@ -416,39 +388,12 @@ button.primary {
   font-weight: 800;
 }
 
-/* soldadinhos na borda de cada jogador */
-.reserve {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 1px;
-  min-height: 22px;
-  padding: 2px 5px;
-  border-radius: 8px;
-  background: #d9cdb3;
-  box-shadow: inset 0 2px 6px #0004;
-}
-
-.reserve:empty {
-  opacity: 0.35;
-}
-
+/* soldadinho (botões de quantos soldados atacam) */
 .pawn {
   width: 22px;
   height: 30px;
   flex: none;
   filter: drop-shadow(0 2px 1px #0007);
-}
-
-.reserve .pawn {
-  width: 13px;
-  height: 18px;
-}
-
-.reserve-extra {
-  font-weight: 800;
-  margin-left: 4px;
-  align-self: center;
 }
 
 /* ---- dados físicos (vermelho ataca, amarelo defende) ---- */
@@ -476,7 +421,7 @@ button.primary {
 }
 
 .seat .die3d {
-  --size: 30px;
+  --size: 34px;
 }
 
 .die3d i {
@@ -829,21 +774,7 @@ button.primary {
   stroke-width: 2.5px;
 }
 
-/* ---- status e ferramentas sobre o mapa ---- */
-.status {
-  /* canto inferior esquerdo da área do mapa: só tem mar ali */
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  max-width: 45%;
-  padding: 5px 12px;
-  border-radius: 12px;
-  background: #fbf7eee6;
-  font-weight: 700;
-  font-size: 0.8rem;
-  pointer-events: none;
-}
-
+/* ---- ferramentas sobre o mapa ---- */
 .toolbar {
   position: absolute;
   top: 0;
@@ -942,12 +873,6 @@ button.primary {
 .seat.defending {
   border-color: var(--defense);
   box-shadow: 0 0 22px var(--defense);
-}
-
-.seat .roll-attack,
-.seat .roll-defense {
-  font-size: 0.95rem;
-  padding: 8px;
 }
 
 .roll-attack {
@@ -1133,56 +1058,12 @@ button.primary {
   font-style: italic;
 }
 
-.seat .chips {
+.turn-panel .chips {
   gap: 4px;
 }
 
-.seat .chip {
+.turn-panel .chip {
   min-width: 0;
-}
-
-/* ---- canto fora da ação: só o nome e o placar, encostado na borda do jogador ---- */
-.seat.collapsed {
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none;
-  justify-content: flex-end;
-  overflow: visible;
-  cursor: pointer;
-  padding: 0;
-}
-
-.seat.collapsed .seat-head {
-  align-self: flex-start;
-  padding: 5px 10px;
-  border-radius: 999px;
-  background: var(--seat);
-  box-shadow: 0 2px 8px #0002;
-  border-left: 4px solid var(--pc);
-}
-
-.seat.collapsed.out .seat-head {
-  border-left-color: transparent;
-}
-
-.peek-icon {
-  color: var(--muted);
-  font-size: 0.7rem;
-}
-
-/* canto aberto para espiar: botão de fechar */
-.seat {
-  position: relative;
-}
-
-.seat .peek-close {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  padding: 2px 7px;
-  font-size: 0.75rem;
-  background: transparent;
-  color: var(--muted);
 }
 
 /* ---- bônus da troca: +2 no estado da carta ---- */
@@ -1207,80 +1088,143 @@ button.primary {
   color: #17703c;
 }
 
-.seat > .reserve {
-  flex: none;
-}
-
-.seat .chips .end-attack {
+.turn-panel .chips .end-attack {
   margin-left: auto;
 }
 
-/* ---- instrução da jogada: faixa em destaque no topo do canto de quem age, fora do mapa ---- */
-.turn-msg {
-  margin-top: auto;
-  padding: 7px 10px 8px;
-  border-radius: 10px;
-  background: var(--pc);
-  color: #fff;
+/* ---- painel da jogada: ao lado do mapa, do lado de quem age e virado para ele ---- */
+.turn-panel {
+  --pc: #1f2d3a;
+  align-self: center;
+  justify-self: stretch;
+  min-width: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px 12px;
+  border-radius: 16px;
+  background: var(--seat);
+  border: 3px solid var(--pc);
+  box-shadow:
+    0 6px 18px #0003,
+    0 0 16px color-mix(in srgb, var(--pc) 45%, transparent);
   text-align: center;
-  box-shadow: 0 3px 10px #0003;
-  animation: turn-msg-in 0.25s ease-out;
   transition: opacity 0.2s;
 }
 
-/* o nome logo abaixo da faixa não precisa mais empurrar o conteúdo para baixo */
-.turn-msg + .seat-head {
-  margin-top: 0;
+/* jogadores do lado de cima leem o painel virado para eles */
+.turn-panel.for-tl,
+.turn-panel.for-tr {
+  transform: rotate(180deg);
 }
 
-.turn-msg p {
-  font-size: 1rem;
+.turn-panel .who {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--pc);
+  color: #fff;
+  font-size: 0.8rem;
   font-weight: 800;
-  line-height: 1.2;
-  text-shadow: 0 1px 2px #0005;
 }
 
-.turn-msg p.big {
-  font-size: 1.25rem;
+.turn-panel .who .swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #fff;
 }
 
-.turn-msg p.sub {
-  margin-top: 3px;
-  font-size: 0.78rem;
+.turn-panel .who .round {
   font-weight: 600;
+  opacity: 0.85;
+}
+
+.turn-panel .msg p {
+  font-size: 1.1rem;
+  font-weight: 800;
+  line-height: 1.22;
+}
+
+.turn-panel .msg p.big {
+  font-size: 1.4rem;
+}
+
+.turn-panel .msg p.sub {
+  margin-top: 4px;
+  font-size: 0.82rem;
+  font-weight: 500;
   line-height: 1.25;
-  opacity: 0.95;
+  color: var(--muted);
 }
 
-.turn-msg.tone-attack {
+.panel-actions {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.panel-actions .hand {
+  justify-content: center;
+}
+
+.turn-panel.tone-attack {
+  border-color: var(--attack);
+}
+
+.turn-panel.tone-defense {
+  border-color: var(--defense);
   box-shadow:
-    0 3px 10px #0003,
-    0 0 0 2px #fff,
-    0 0 0 4px #d63c31;
+    0 6px 18px #0003,
+    0 0 20px var(--defense);
 }
 
-.turn-msg.tone-defense {
-  background: var(--defense);
-  color: #3a2a00;
-}
-
-.turn-msg.tone-defense p {
-  text-shadow: none;
-}
-
-.turn-msg.tone-win {
+.turn-panel.tone-win {
+  border-color: var(--accent);
   box-shadow:
-    0 3px 10px #0003,
-    0 0 16px var(--accent);
+    0 6px 18px #0003,
+    0 0 24px var(--accent);
 }
 
-.turn-msg.rolling {
+.turn-panel.rolling {
   opacity: 0.7;
 }
 
-@keyframes turn-msg-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
+/* ---- placar no menu ---- */
+.score {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 12px;
+  font-size: 0.9rem;
+}
+
+.score th,
+.score td {
+  padding: 4px 6px;
+  text-align: left;
+  border-bottom: 1px solid #0001;
+}
+
+.score th {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.score .swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--pc);
 }
