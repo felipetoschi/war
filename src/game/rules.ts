@@ -65,6 +65,7 @@ export function createGame(map: GameMap, players: Player[], rng: Rng = Math.rand
     phase: "order",
     round: 0,
     pendingReinforcements: 0,
+    placementLeft: {},
     fortified: {},
     fortifyMoves: {},
     conqueredThisTurn: false,
@@ -109,7 +110,7 @@ export function rollForOrder(
     next.players = order.map((id) => next.players.find((p) => p.id === id)!);
     next.phase = "placement";
     next.currentPlayerIndex = 0;
-    next.pendingReinforcements = INITIAL_ARMIES;
+    next.placementLeft = Object.fromEntries(next.players.map((p) => [p.id, INITIAL_ARMIES]));
   }
   return next;
 }
@@ -212,7 +213,17 @@ export function mustTrade(state: GameState): boolean {
   return (state.hands[currentPlayer(state).id]?.length ?? 0) >= MAX_HAND;
 }
 
-/** Posiciona soldados na rodada inicial ou no reforço do turno. */
+/** Jogadores que ainda têm soldados a posicionar na rodada inicial. */
+export function playersStillPlacing(state: GameState): PlayerId[] {
+  if (state.phase !== "placement") return [];
+  return state.players.filter((p) => (state.placementLeft[p.id] ?? 0) > 0).map((p) => p.id);
+}
+
+/**
+ * Posiciona soldados na rodada inicial ou no reforço do turno.
+ * Na rodada inicial todos posicionam ao mesmo tempo: o soldado vai para o dono do estado.
+ * Quando o último termina, começa a rodada 1, na ordem sorteada.
+ */
 export function placeArmies(
   state: GameState,
   map: GameMap,
@@ -220,6 +231,7 @@ export function placeArmies(
   amount: number,
 ): GameState {
   assertPhase(state, "placement", "reinforce");
+  if (state.phase === "placement") return placeInitial(state, map, territory, amount);
   assertOwnedByCurrent(state, territory);
   if (state.phase === "reinforce" && mustTrade(state)) {
     throw new Error(`Com ${MAX_HAND} cartas ou mais, é obrigatório trocar antes`);
@@ -231,19 +243,29 @@ export function placeArmies(
   next.territories[territory]!.armies += amount;
   next.pendingReinforcements -= amount;
   if (checkVictory(next, map, currentPlayer(next).id).winner) return next;
-  if (next.pendingReinforcements > 0) return next;
+  if (next.pendingReinforcements === 0) next.phase = "attack";
+  return next;
+}
 
-  if (next.phase === "reinforce") {
-    next.phase = "attack";
-    return next;
+function placeInitial(
+  state: GameState,
+  map: GameMap,
+  territory: TerritoryId,
+  amount: number,
+): GameState {
+  const owner = state.territories[territory]?.owner;
+  if (!owner) throw new Error(`Estado desconhecido: ${territory}`);
+  const left = state.placementLeft[owner] ?? 0;
+  if (left === 0) throw new Error("Esse jogador já colocou todos os seus soldados");
+  if (!Number.isInteger(amount) || amount < 1 || amount > left) {
+    throw new Error("Quantidade de soldados inválida");
   }
-  // Rodada inicial: passa para o próximo; depois do último, começa a rodada 1 (ataques).
-  const following = state.currentPlayerIndex + 1;
-  if (following < state.players.length) {
-    next.currentPlayerIndex = following;
-    next.pendingReinforcements = INITIAL_ARMIES;
-    return next;
-  }
+  const next = structuredClone(state);
+  next.territories[territory]!.armies += amount;
+  next.placementLeft[owner] = left - amount;
+  if (playersStillPlacing(next).length > 0) return next;
+  // Todos colocaram: começa a rodada 1 (ataques), na ordem sorteada.
+  next.placementLeft = {};
   next.round = 1;
   return startTurn(next, map, 0);
 }

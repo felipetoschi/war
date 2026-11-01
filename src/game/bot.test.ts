@@ -63,6 +63,26 @@ describe("bots", () => {
     expect(action).toEqual({ type: "roll-order", players: ["b"] });
   });
 
+  it("na rodada inicial, o bot coloca ao mesmo tempo que o humano", () => {
+    const players: Player[] = [
+      { id: "h", name: "Humano", color: "#000" },
+      { id: "b", name: "Bot", color: "#111", bot: true },
+    ];
+    let state: GameState = {
+      ...createGame(map, players),
+      phase: "placement",
+      placementLeft: { h: 3, b: 3 },
+    };
+    // o humano é o primeiro da ordem, mas o bot não espera por ele
+    for (let i = 0; i < 3; i++) {
+      expect(botToAct(state)).toBe("b");
+      state = applyBotAction(state, map, chooseBotAction(state, map, "b"));
+    }
+    expect(state.placementLeft).toEqual({ h: 3, b: 0 });
+    expect(botToAct(state)).toBeNull(); // falta só o humano
+    expect(state.phase).toBe("placement");
+  });
+
   it("bot defende sozinho quando um humano o ataca", () => {
     const players: Player[] = [
       { id: "h", name: "Humano", color: "#000" },

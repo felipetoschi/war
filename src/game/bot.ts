@@ -12,6 +12,7 @@ import {
   movableTo,
   mustTrade,
   placeArmies,
+  playersStillPlacing,
   playersToRollForOrder,
   rollAttack,
   rollDefense,
@@ -50,6 +51,9 @@ export function botToAct(state: GameState): PlayerId | null {
   if (state.phase === "finished") return null;
   if (state.phase === "order") {
     return playersToRollForOrder(state).find((id) => isBot(state, id)) ?? null;
+  }
+  if (state.phase === "placement") {
+    return playersStillPlacing(state).find((id) => isBot(state, id)) ?? null;
   }
   const battle = state.battle;
   if (battle) {
